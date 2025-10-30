@@ -47,3 +47,4 @@ filesystem, basta con que el resultado de la consulta sea XML.
 • Se espera que apliquen en todo el trabajo las pautas consignadas en la Unidad 3
 respecto a optimización de código y de tipos de datos.
 */
+
