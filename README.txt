@@ -1,6 +1,6 @@
-##Grupo 11
+## Grupo 11
 
-#Mienbros
+# Mienbros
 
 Hidalgo, Eduardo - 
 Quispe, Milagros Soledad - 
@@ -8,3 +8,4 @@ Puma, Florencia -
 Fontanet Caniza, Camila - 
 Altamiranda, Isaias Taiel - 
 Pastori, Ximena -
+
