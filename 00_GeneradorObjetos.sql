@@ -77,13 +77,48 @@ go
 CREATE SCHEMA Pago;
 go
 
-/*
-SELECT
-    name AS NombreEsquema
-FROM
-    sys.schemas
-WHERE
-    schema_id < 16000 -- Generalmente filtra los esquemas temporales y del sistema
-    AND name NOT IN ('sys', 'INFORMATION_SCHEMA', 'guest', 'db_owner')
-ORDER BY
-    name; 
+CREATE TABLE Pago.FormaDePago (
+    idFormaPago INT IDENTITY(1,1) NOT NULL,
+    
+    descripcion VARCHAR(50) NOT NULL,
+    
+    confirmacion VARCHAR(20) NULL, 
+    
+    CONSTRAINT PK_FormaDePago PRIMARY KEY CLUSTERED (idFormaPago)
+);
+GO
+
+CREATE TABLE Pago.Pago (
+    id INT IDENTITY(1,1) NOT NULL,
+    
+    idFormaPago INT NOT NULL, 
+    
+    cbuCuentaOrigen VARCHAR(50) NOT NULL, 
+    
+    fecha DATETIME2(0) NOT NULL DEFAULT GETDATE(),
+    
+    importe DECIMAL(18, 2) NOT NULL, 
+    
+    CONSTRAINT PK_Pago PRIMARY KEY CLUSTERED (id),
+    
+    CONSTRAINT FK_Pago_FormaDePago FOREIGN KEY (idFormaPago)
+        REFERENCES Pago.FormaDePago (idFormaPago)
+);
+GO
+
+CREATE TABLE Pago.PagoAplicado (
+    idPago INT NOT NULL, 
+    
+    idDetalleExpensa INT NOT NULL, 
+    
+    importeAplicado DECIMAL(18, 2) NOT NULL, 
+    
+    CONSTRAINT PK_PagoAplicado PRIMARY KEY CLUSTERED (idPago, idDetalleExpensa),
+    
+    CONSTRAINT FK_PagoAplicado_Pago FOREIGN KEY (idPago)
+        REFERENCES Pago.Pago (id),
+    -- CONSTRAINT FK_PagoAplicado_DetalleExpensa FOREIGN KEY (idDetalleExpensa)
+    --    REFERENCES Consorcio.DetalleExpensa (idDetalleExpensa)
+);
+GO
+
