@@ -1,19 +1,20 @@
-CREATE TABLE UnidadFuncional 
+CREATE TABLE Consorcio.UnidadFuncional 
 (
     id INT IDENTITY(1,1) PRIMARY KEY,
-    eso es NOT NULL.
-    CVU_CBUPersona CHAR(22) NOT NULL FOREIGN KEY FK_CVUCBUPersona REFERENCES CuentaBancaria(CVU_CBU), 
-    consorcioId INT NOT NULL FOREIGN KEY FK_consorcioId REFERENCES Consorcio(id), 
+    CVU_CBUPersona CHAR(22) NOT NULL, 
+    consorcioId INT NOT NULL, 
     departamento VARCHAR(10),
     piso VARCHAR(10),
     numero VARCHAR(10),
     metrosCuadrados DECIMAL(10, 2) NOT NULL,
     porcentajeExpensas DECIMAL(5, 2) NOT NULL,
-    tipo VARCHAR(50)
+    tipo VARCHAR(50),
+	CONSTRAINT FK_CVUCBUPersona FOREIGN KEY (CVU_CBUPersona) REFERENCES Consorcio.CuentaBancaria(CVU_CBU),
+	CONSTRAINT FK_consorcioId FOREIGN KEY (consorcioId) REFERENCES Consorcio.Consorcio(id)
 );
 GO
 
-CREATE TABLE Cochera 
+CREATE TABLE Consorcio.Cochera 
 (
     id INT IDENTITY(1,1) PRIMARY KEY,
     unidadFuncionalId INT, 
@@ -23,7 +24,7 @@ CREATE TABLE Cochera
 );
 GO
 
-CREATE TABLE Baulera 
+CREATE TABLE Consorcio.Baulera 
 (
     id INT IDENTITY(1,1) PRIMARY KEY,
     unidadFuncionalId INT,
