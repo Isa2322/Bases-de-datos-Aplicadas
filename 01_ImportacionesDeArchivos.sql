@@ -100,7 +100,7 @@ BEGIN
     select * from #TemporalDatosServicio;
 
 
- 
+/* 
     -- 2- almacenar a Negocio.GastoOrdinario (Búsqueda de FK y Mapeo)
     
     INSERT INTO Negocio.GastoOrdinario (
@@ -185,6 +185,8 @@ BEGIN
 
     -- 3- eliminar la tabla temporal
     DROP TABLE #TemporalDatosServicio;
+
+    */ 
 
 END
 GO
