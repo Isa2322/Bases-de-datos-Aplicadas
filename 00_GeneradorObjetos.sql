@@ -14,38 +14,38 @@ Pastori, Ximena - 42300128
 
 Enunciado:
 Base de datos lineamientos generales
-Se requiere que importe toda la informaciÛn antes mencionada a la base de datos:
-ï Genere los objetos necesarios (store procedures, funciones, etc.) para importar los
-archivos antes mencionados. Tenga en cuenta que cada mes se recibir·n archivos de
+Se requiere que importe toda la informaci√≥n antes mencionada a la base de datos:
+‚Ä¢ Genere los objetos necesarios (store procedures, funciones, etc.) para importar los
+archivos antes mencionados. Tenga en cuenta que cada mes se recibir√°n archivos de
 novedades con la misma estructura, pero datos nuevos para agregar a cada maestro.
-ï Considere este comportamiento al generar el cÛdigo. Debe admitir la importaciÛn de
-novedades periÛdicamente sin eliminar los datos ya cargados y sin generar
+‚Ä¢ Considere este comportamiento al generar el c√≥digo. Debe admitir la importaci√≥n de
+novedades peri√≥dicamente sin eliminar los datos ya cargados y sin generar
 duplicados.
-ï Cada maestro debe importarse con un SP distinto. No se aceptar·n scripts que
-realicen tareas por fuera de un SP. Se proveer·n archivos para importar en MIEL.
-ï La estructura/esquema de las tablas a generar ser· decisiÛn suya. Puede que deba
-realizar procesos de transformaciÛn sobre los maestros recibidos para adaptarlos a la
-estructura requerida. Estas adaptaciones deber·n hacerla en la DB y no en los
+‚Ä¢ Cada maestro debe importarse con un SP distinto. No se aceptar√°n scripts que
+realicen tareas por fuera de un SP. Se proveer√°n archivos para importar en MIEL.
+‚Ä¢ La estructura/esquema de las tablas a generar ser√° decisi√≥n suya. Puede que deba
+realizar procesos de transformaci√≥n sobre los maestros recibidos para adaptarlos a la
+estructura requerida. Estas adaptaciones deber√°n hacerla en la DB y no en los
 archivos provistos.
-ï Los archivos CSV/JSON no deben modificarse. En caso de que haya datos mal
-cargados, incompletos, errÛneos, etc., deber· contemplarlo y realizar las correcciones
-en la fuente SQL. (SerÌa una excepciÛn si el archivo est· malformado y no es posible
+‚Ä¢ Los archivos CSV/JSON no deben modificarse. En caso de que haya datos mal
+cargados, incompletos, err√≥neos, etc., deber√° contemplarlo y realizar las correcciones
+en la fuente SQL. (Ser√≠a una excepci√≥n si el archivo est√° malformado y no es posible
 interpretarlo como JSON o CSV, pero los hemos verificado cuidadosamente).
-ï Tener en cuenta que para la ampliaciÛn del software no existen datos; se deben
+‚Ä¢ Tener en cuenta que para la ampliaci√≥n del software no existen datos; se deben
 preparar los datos de prueba necesarios para cumplimentar los requisitos planteados.
-ï El cÛdigo fuente no debe incluir referencias hardcodeadas a nombres o ubicaciones
-de archivo. Esto debe permitirse ser provisto por par·metro en la invocaciÛn. En el
-cÛdigo de ejemplo se ver· dÛnde el grupo decidiÛ ubicar los archivos, pero si cambia
-el entorno de ejecuciÛn deberÌa adaptarse sin modificar el fuente (sÌ obviamente el
-script de testing). La configuraciÛn escogida debe aparecer en comentarios del
-mÛdulo.
-ï El uso de SQL din·mico no est· exigido en forma explÌcitaÖ pero puede que
-encuentre que es la ˙nica forma de resolver algunos puntos. No abuse del SQL
-din·mico, deber· justificar su uso siempre.
-ï Respecto a los informes XML: no se espera que produzcan un archivo nuevo en el
+‚Ä¢ El c√≥digo fuente no debe incluir referencias hardcodeadas a nombres o ubicaciones
+de archivo. Esto debe permitirse ser provisto por par√°metro en la invocaci√≥n. En el
+c√≥digo de ejemplo se ver√° d√≥nde el grupo decidi√≥ ubicar los archivos, pero si cambia
+el entorno de ejecuci√≥n deber√≠a adaptarse sin modificar el fuente (s√≠ obviamente el
+script de testing). La configuraci√≥n escogida debe aparecer en comentarios del
+m√≥dulo.
+‚Ä¢ El uso de SQL din√°mico no est√° exigido en forma expl√≠cita‚Ä¶ pero puede que
+encuentre que es la √∫nica forma de resolver algunos puntos. No abuse del SQL
+din√°mico, deber√° justificar su uso siempre.
+‚Ä¢ Respecto a los informes XML: no se espera que produzcan un archivo nuevo en el
 filesystem, basta con que el resultado de la consulta sea XML.
-ï Se espera que apliquen en todo el trabajo las pautas consignadas en la Unidad 3
-respecto a optimizaciÛn de cÛdigo y de tipos de datos.
+‚Ä¢ Se espera que apliquen en todo el trabajo las pautas consignadas en la Unidad 3
+respecto a optimizaci√≥n de c√≥digo y de tipos de datos.
 */
 
 EXEC msdb.dbo.sp_delete_database_backuphistory @database_name = N'Com5600G11'
@@ -68,8 +68,17 @@ go
 CREATE SCHEMA Operaciones;
 go
 
-CREATE SCHEMA Negocio;
-go
+-- Nos fijamos que no exista antes de crearlo
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Negocio')
+BEGIN
+    EXEC('CREATE SCHEMA Negocio');
+    PRINT N'schema "Negocio" no exist√≠a: se cre√≥ correctamente.';
+END
+ELSE
+BEGIN
+    PRINT N'schema "Negocio" ya existe: no se cre√≥ nada.';
+END
+GO
 
 CREATE SCHEMA Consorcio;
 go
@@ -123,9 +132,62 @@ CREATE TABLE Pago.PagoAplicado (
     CONSTRAINT PK_PagoAplicado PRIMARY KEY CLUSTERED (idPago, idDetalleExpensa),
     
     CONSTRAINT FK_PagoAplicado_Pago FOREIGN KEY (idPago)
-        REFERENCES Pago.Pago (id),
-    -- CONSTRAINT FK_PagoAplicado_DetalleExpensa FOREIGN KEY (idDetalleExpensa)
-    --    REFERENCES Consorcio.DetalleExpensa (idDetalleExpensa)
+    REFERENCES Pago.Pago (id),
+    --CONSTRAINT FK_PagoAplicado_DetalleExpensa FOREIGN KEY (idDetalleExpensa)
+    --REFERENCES Consorcio.DetalleExpensa (idDetalleExpensa)
 );
 GO
 
+
+-- Nos fijamos que no exista antes de crear la tabla Expensa para la FK
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'Negocio.Expensa') AND type = 'U')
+BEGIN
+    CREATE TABLE Negocio.Expensa (
+        id INT PRIMARY KEY IDENTITY,
+        idConsorcio INT NULL,
+        periodo NVARCHAR(50) NULL
+    )
+END
+GO
+
+
+IF OBJECT_ID(N'Negocio.GastoOrdinario', 'U') IS NULL
+CREATE TABLE Negocio.GastoOrdinario (
+    idGasto INT PRIMARY KEY IDENTITY,
+    idExpensa INT NOT NULL,  -- FK hacia Expensa
+    idConsorcio int not null, -- fk consorcio
+    nombreEmpresaoPersona VARCHAR(200) NULL,
+    nroFactura VARCHAR(50) NULL,
+    fechaEmision DATE NULL,
+    importeTotal DECIMAL(18, 2) NOT NULL,
+    detalle VARCHAR(500) NULL,
+    tipoServicio VARCHAR(50) NULL,
+    CONSTRAINT FK_GastoOrd_Expensa FOREIGN KEY (idExpensa) 
+        REFERENCES Negocio.Expensa(id)
+)
+ELSE
+    PRINT N'Ya existe la tabla.'
+GO
+
+IF OBJECT_ID(N'Negocio.GastoExtraordinario', 'U') IS NULL
+CREATE TABLE Negocio.GastoExtraordinario (
+    idGasto INT PRIMARY KEY IDENTITY,
+    idExpensa INT NOT NULL, 
+    idConsorcio int not null, -- fk consorcio
+    nombreEmpresaoPersona VARCHAR(200) NULL,
+    nroFactura VARCHAR(50) NULL,
+    fechaEmision DATE NULL,
+    importeTotal DECIMAL(18, 2) NOT NULL,
+    detalle VARCHAR(500) NULL,
+    esPagoTotal BIT NOT NULL,
+    nroCuota INT NULL,
+    totalCuota DECIMAL(18, 2) NOT NULL,
+    CONSTRAINT FK_GastoExt_Expensa FOREIGN KEY (idExpensa) 
+        REFERENCES Negocio.Expensa(id)
+)
+ELSE
+    PRINT N'Ya existe la tabla.'
+GO
+
+
+--select * from Negocio.GastoExtraordinario
