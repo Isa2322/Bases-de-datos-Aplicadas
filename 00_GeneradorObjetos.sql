@@ -218,7 +218,7 @@ GO
 IF NOT EXISTS(SELECT name FROM sys.tables WHERE name= 'Consorcio.CuentaBancaria')
 BEGIN
 		CREATE TABLE Consorcio.CuentaBancaria( 
-		CVU_CBU CHAR(22)  NOT NULL,
+		CVU_CBU VARCHAR(22)  NOT NULL,
 		CUIL INT  NOT NULL,
 		idPersona INT  NOT NULL,
 		nombreTitular varchar(50),
