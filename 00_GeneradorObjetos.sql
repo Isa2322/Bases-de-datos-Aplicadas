@@ -129,3 +129,33 @@ CREATE TABLE Pago.PagoAplicado (
 );
 GO
 
+IF NOT EXISTS(SELECT name FROM sys.tables WHERE name= 'Consorcio.CuentaBancaria')
+BEGIN
+		CREATE TABLE Consorcio.CuentaBancaria( 
+		CVU_CBU CHAR(22)  NOT NULL,
+		CUIL INT  NOT NULL,
+		idPersona INT  NOT NULL,
+		nombreTitular varchar(50),
+		saldo decimal(10,2),
+		CONSTRAINT PK_CVU_CBU PRIMARY KEY(CVU_CBU),
+		CONSTRAINT FK_CUIL FOREIGN KEY (CUIL) 
+		REFERENCES Consorcio.Persona(CUIL),
+		CONSTRAINT FK_idPersona FOREIGN KEY(idPersona)
+		REFERENCES Consorcio.Persona(idPersona),
+		CONSTRAINT CHK_saldo CHECK(saldo >=0)
+		)
+END
+GO
+
+IF NOT EXISTS(SELECT name FROM sys.tables WHERE name='Consorsio.Consorcio')
+BEGIN
+		CREATE TABLE Consorcio.Consorcio(
+		id INT IDENTITY (1,1) NOT NULL,
+		nombre VARCHAR(50) NOT NULL,
+		direccion VARCHAR(100),
+		metrosCuadradosTotal decimal(10,2) NOT NULL,
+		CONSTRAINT PK_id PRIMARY KEY(id),
+		CONSTRAINT CHK_metrosCuadradosTotal CHECK(metrosCuadradosTotal>0)
+		)
+END
+GO
