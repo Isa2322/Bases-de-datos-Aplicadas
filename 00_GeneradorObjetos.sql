@@ -155,7 +155,6 @@ IF OBJECT_ID(N'Negocio.GastoOrdinario', 'U') IS NULL
 CREATE TABLE Negocio.GastoOrdinario (
     idGasto INT PRIMARY KEY IDENTITY,
     idExpensa INT NOT NULL,  -- FK hacia Expensa
-    idConsorcio int not null, -- fk consorcio
     nombreEmpresaoPersona VARCHAR(200) NULL,
     nroFactura VARCHAR(50) NULL,
     fechaEmision DATE NULL,
@@ -173,7 +172,6 @@ IF OBJECT_ID(N'Negocio.GastoExtraordinario', 'U') IS NULL
 CREATE TABLE Negocio.GastoExtraordinario (
     idGasto INT PRIMARY KEY IDENTITY,
     idExpensa INT NOT NULL, 
-    idConsorcio int not null, -- fk consorcio
     nombreEmpresaoPersona VARCHAR(200) NULL,
     nroFactura VARCHAR(50) NULL,
     fechaEmision DATE NULL,
