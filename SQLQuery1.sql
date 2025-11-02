@@ -1,8 +1,9 @@
 CREATE TABLE UnidadFuncional 
 (
     id INT IDENTITY(1,1) PRIMARY KEY,
-    CVU_CBUPersona CHAR(22) NOT NULL FOREIGN KEY (CVU_CBUPersona) REFERENCES CuentaBancaria(CVU_CBU), 
-    consorcioId INT NOT NULL FOREIGN KEY (consorcioId) REFERENCES Consorcio(id), 
+    eso es NOT NULL.
+    CVU_CBUPersona CHAR(22) NOT NULL FOREIGN KEY FK_CVUCBUPersona REFERENCES CuentaBancaria(CVU_CBU), 
+    consorcioId INT NOT NULL FOREIGN KEY FK_consorcioId REFERENCES Consorcio(id), 
     departamento VARCHAR(10),
     piso VARCHAR(10),
     numero VARCHAR(10),
@@ -31,4 +32,3 @@ CREATE TABLE Baulera
     CONSTRAINT FK_Baulera_UnidadFuncional FOREIGN KEY (unidadFuncionalId) REFERENCES UnidadFuncional(id)
 );
 GO
-
