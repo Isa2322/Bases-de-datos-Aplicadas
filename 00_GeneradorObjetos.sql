@@ -56,26 +56,60 @@ GO
 -- Forzar desconexion de la base de datos
 ALTER DATABASE Com5600G11 SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
 go
-DROP DATABASE [Com5600G11]
-GO
 
-CREATE DATABASE Com5600G11;
-go
+IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'Com5600G11')
+BEGIN
+    CREATE DATABASE Com5600G11;
+END;
+GO
 
 use [Com5600G11];
 go 
 
-CREATE SCHEMA Operaciones;
-go
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Operaciones')
+BEGIN
+    EXEC('CREATE SCHEMA Operaciones');
+    PRINT N'schema "Operaciones" no existía: se creó correctamente.';
+END
+ELSE
+BEGIN
+    PRINT N'schema "Operaciones" ya existe: no se creó nada.';
+END
+GO
 
-CREATE SCHEMA Negocio;
-go
+-- Nos fijamos que no exista antes de crearlo
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Negocio')
+BEGIN
+    EXEC('CREATE SCHEMA Negocio');
+    PRINT N'schema "Negocio" no existía: se creó correctamente.';
+END
+ELSE
+BEGIN
+    PRINT N'schema "Negocio" ya existe: no se creó nada.';
+END
+GO
 
-CREATE SCHEMA Consorcio;
-go
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Consorcio')
+BEGIN
+    EXEC('CREATE SCHEMA Consorcio');
+    PRINT N'schema "Consorcio" no existía: se creó correctamente.';
+END
+ELSE
+BEGIN
+    PRINT N'schema "Consorcio" ya existe: no se creó nada.';
+END
+GO
 
-CREATE SCHEMA Pago;
-go
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Pago')
+BEGIN
+    EXEC('CREATE SCHEMA Pago');
+    PRINT N'schema "Pago" no existía: se creó correctamente.';
+END
+ELSE
+BEGIN
+    PRINT N'schema "Pago" ya existe: no se creó nada.';
+END
+GO
 
 DROP TABLE IF EXISTS Pago.FormaDePago
 GO
@@ -123,11 +157,63 @@ CREATE TABLE Pago.PagoAplicado (
     CONSTRAINT PK_PagoAplicado PRIMARY KEY CLUSTERED (idPago, idDetalleExpensa),
     
     CONSTRAINT FK_PagoAplicado_Pago FOREIGN KEY (idPago)
-        REFERENCES Pago.Pago (id),
-    -- CONSTRAINT FK_PagoAplicado_DetalleExpensa FOREIGN KEY (idDetalleExpensa)
-    --    REFERENCES Consorcio.DetalleExpensa (idDetalleExpensa)
+    REFERENCES Pago.Pago (id),
+    --CONSTRAINT FK_PagoAplicado_DetalleExpensa FOREIGN KEY (idDetalleExpensa)
+    --REFERENCES Consorcio.DetalleExpensa (idDetalleExpensa)
 );
 GO
+
+
+-- Nos fijamos que no exista antes de crear la tabla Expensa para la FK
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'Negocio.Expensa') AND type = 'U')
+BEGIN
+    CREATE TABLE Negocio.Expensa (
+        id INT PRIMARY KEY IDENTITY,
+        idConsorcio INT NULL,
+        periodo NVARCHAR(50) NULL
+    )
+END
+GO
+
+
+IF OBJECT_ID(N'Negocio.GastoOrdinario', 'U') IS NULL
+CREATE TABLE Negocio.GastoOrdinario (
+    idGasto INT PRIMARY KEY IDENTITY,
+    idExpensa INT NOT NULL,  -- FK hacia Expensa
+    idConsorcio int not null, -- fk consorcio
+    nombreEmpresaoPersona VARCHAR(200) NULL,
+    nroFactura VARCHAR(50) NULL,
+    fechaEmision DATE NULL,
+    importeTotal DECIMAL(18, 2) NOT NULL,
+    detalle VARCHAR(500) NULL,
+    tipoServicio VARCHAR(50) NULL,
+    CONSTRAINT FK_GastoOrd_Expensa FOREIGN KEY (idExpensa) 
+        REFERENCES Negocio.Expensa(id)
+)
+ELSE
+    PRINT N'Ya existe la tabla.'
+GO
+
+IF OBJECT_ID(N'Negocio.GastoExtraordinario', 'U') IS NULL
+CREATE TABLE Negocio.GastoExtraordinario (
+    idGasto INT PRIMARY KEY IDENTITY,
+    idExpensa INT NOT NULL, 
+    idConsorcio int not null, -- fk consorcio
+    nombreEmpresaoPersona VARCHAR(200) NULL,
+    nroFactura VARCHAR(50) NULL,
+    fechaEmision DATE NULL,
+    importeTotal DECIMAL(18, 2) NOT NULL,
+    detalle VARCHAR(500) NULL,
+    esPagoTotal BIT NOT NULL,
+    nroCuota INT NULL,
+    totalCuota DECIMAL(18, 2) NOT NULL,
+    CONSTRAINT FK_GastoExt_Expensa FOREIGN KEY (idExpensa) 
+        REFERENCES Negocio.Expensa(id)
+)
+ELSE
+    PRINT N'Ya existe la tabla.'
+GO
+
 
 IF NOT EXISTS(SELECT name FROM sys.tables WHERE name= 'Consorcio.CuentaBancaria')
 BEGIN
