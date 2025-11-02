@@ -2,7 +2,7 @@ CREATE TABLE UnidadFuncional
 (
     id INT IDENTITY(1,1) PRIMARY KEY,
     eso es NOT NULL.
-    CVU_CBUPersona VARCHAR(22) NOT NULL FOREIGN KEY (CVU_CBUPersona) REFERENCES CuentaBancaria(CVU_CBU), 
+    CVU_CBUPersona CHAR(22) NOT NULL FOREIGN KEY (CVU_CBUPersona) REFERENCES CuentaBancaria(CVU_CBU), 
     consorcioId INT NOT NULL FOREIGN KEY (consorcioId) REFERENCES Consorcio(id), 
     departamento VARCHAR(10),
     piso VARCHAR(10),
