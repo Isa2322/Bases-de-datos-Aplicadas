@@ -212,5 +212,65 @@ ELSE
     PRINT N'Ya existe la tabla.'
 GO
 
+IF OBJECT_ID(N'Consorcio.UnidadFuncional', 'U') IS NULL
+BEGIN
+    CREATE TABLE Consorcio.UnidadFuncional
+    (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        CVU_CBUPersona CHAR(22) NOT NULL,
+        consorcioId INT NOT NULL,
+        departamento VARCHAR(10) NULL,
+        piso VARCHAR(10) NULL,
+        numero VARCHAR(10) NULL,
+        metrosCuadrados DECIMAL(10, 2) NOT NULL,
+        porcentajeExpensas DECIMAL(5, 2) NOT NULL,
+        tipo VARCHAR(50) NULL,
+        
+        CONSTRAINT FK_UF_CuentaBancaria FOREIGN KEY (CVU_CBUPersona) 
+            REFERENCES Persona.CuentaBancaria(CVU_CBU), 
+            
+        CONSTRAINT FK_UF_Consorcio FOREIGN KEY (consorcioId) 
+            REFERENCES Consorcio.ConsorcioMaster(idConsorcio)
+    );
+END
+ELSE
+    PRINT N'Ya existe la tabla Consorcio.UnidadFuncional.';
+GO
 
---select * from Negocio.GastoExtraordinario
+---
+
+IF OBJECT_ID(N'Consorcio.Cochera', 'U') IS NULL
+BEGIN
+    CREATE TABLE Consorcio.Cochera
+    (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        unidadFuncionalId INT NULL,
+        numero VARCHAR(10) NOT NULL,
+        porcentajeExpensas DECIMAL(5, 2) NOT NULL,
+        
+        CONSTRAINT FK_Cochera_UnidadFuncional FOREIGN KEY (unidadFuncionalId) 
+            REFERENCES Consorcio.UnidadFuncional(id)
+    );
+END
+ELSE
+    PRINT N'Ya existe la tabla Consorcio.Cochera.';
+GO
+
+---
+
+IF OBJECT_ID(N'Consorcio.Baulera', 'U') IS NULL
+BEGIN
+    CREATE TABLE Consorcio.Baulera
+    (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        unidadFuncionalId INT NULL,
+        numero VARCHAR(10) NOT NULL,
+        porcentajeExpensas DECIMAL(5, 2) NOT NULL,
+        
+        CONSTRAINT FK_Baulera_UnidadFuncional FOREIGN KEY (unidadFuncionalId) 
+            REFERENCES Consorcio.UnidadFuncional(id)
+    );
+END
+ELSE
+    PRINT N'Ya existe la tabla Consorcio.Baulera.';
+GO
