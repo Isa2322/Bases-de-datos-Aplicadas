@@ -4,7 +4,7 @@ Com:3641
 Fecha de entrega: 7/11
 Grupo 11
 
-Mienbros:
+Miembros:
 Hidalgo, Eduardo - 41173099
 Quispe, Milagros Soledad - 45064110
 Puma, Florencia - 42945609
@@ -77,6 +77,9 @@ go
 CREATE SCHEMA Pago;
 go
 
+DROP TABLE IF EXISTS Pago.FormaDePago
+GO
+
 CREATE TABLE Pago.FormaDePago (
     idFormaPago INT IDENTITY(1,1) NOT NULL,
     
@@ -88,6 +91,8 @@ CREATE TABLE Pago.FormaDePago (
 );
 GO
 
+DROP TABLE IF EXISTS Pago.Pago
+GO
 CREATE TABLE Pago.Pago (
     id INT IDENTITY(1,1) NOT NULL,
     
@@ -106,6 +111,8 @@ CREATE TABLE Pago.Pago (
 );
 GO
 
+DROP TABLE IF EXISTS Pago.PagoAplicado
+GO
 CREATE TABLE Pago.PagoAplicado (
     idPago INT NOT NULL, 
     
