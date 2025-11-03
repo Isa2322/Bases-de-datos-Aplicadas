@@ -33,3 +33,5 @@ CREATE TABLE Consorcio.Baulera
     CONSTRAINT FK_Baulera_UnidadFuncional FOREIGN KEY (unidadFuncionalId) REFERENCES UnidadFuncional(id)
 );
 GO
+
+
