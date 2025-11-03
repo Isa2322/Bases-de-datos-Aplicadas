@@ -233,7 +233,7 @@ BEGIN
 END
 GO
 
-IF NOT EXISTS(SELECT name FROM sys.tables WHERE name='Consorsio.Consorcio')
+IF NOT EXISTS(SELECT name FROM sys.tables WHERE name='Consorcio.Consorcio')
 BEGIN
 		CREATE TABLE Consorcio.Consorcio(
 		id INT IDENTITY (1,1) NOT NULL,

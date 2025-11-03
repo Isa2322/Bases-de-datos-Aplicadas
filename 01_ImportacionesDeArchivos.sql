@@ -17,20 +17,23 @@ Pastori, Ximena - 42300128*/
 use [Com5600G11];
 go 
 
-DROP TABLE IF EXISTS #PagosConsorcio
-GO
-CREATE TABLE #PagosConsorcio (idPago int , fecha VARCHAR(10),CVU_CBU VARCHAR(22),valor varchar (12));
-GO
+CREATE OR ALTER PROCEDURE Pago.ImportacionPago
+	AS
+	BEGIN
 
-BULK INSERT #PagosConsorcio
-FROM 'D:\edu\uni\base de datos aplicada\tp-2\consorcios\pagos_consorcios.csv'
-WITH(
-FIELDTERMINATOR = ',', -- Especifica el delimitador de campo (coma en un archivo CSV)
-ROWTERMINATOR = '\n', -- Especifica el terminador de fila (salto de línea en un archivo CSV)
-CODEPAGE = 'ACP',-- Especifica la página de códigos del archivo
-FIRSTROW=2
-)
-GO
+	SET NOCOUNT ON;
+
+	CREATE TABLE #PagosConsorcio (idPago int , fecha VARCHAR(10),CVU_CBU VARCHAR(22),valor varchar (12))
+
+	BULK INSERT #PagosConsorcio
+	FROM 'C:\consorcios\pagos_consorcios.csv'
+	WITH(
+		FIELDTERMINATOR = ',', -- Especifica el delimitador de campo (coma en un archivo CSV)
+		ROWTERMINATOR = '\n', -- Especifica el terminador de fila (salto de línea en un archivo CSV)
+		CODEPAGE = 'ACP',-- Especifica la página de códigos del archivo
+		FIRSTROW=2
+		)
+		
 
 DELETE FROM #PagosConsorcio-- Elimino las filas nulas en caso de que se generen
 WHERE 
@@ -38,29 +41,58 @@ WHERE
     AND fecha IS NULL
     AND CVU_CBU IS NULL
 	AND valor IS NULL;
-GO
+
 
 --Preparo los valores para cargar la tabla Pago.Pago 
 UPDATE #PagosConsorcio
 	SET valor = REPLACE(Valor, '$', '')
-go
+
 
 UPDATE #PagosConsorcio
 	SET valor = CAST(valor AS DECIMAL(18,2))
-go
+
 
 UPDATE #PagosConsorcio
 	SET fecha = CONVERT(DATE, fecha, 103)
-GO
 
-SELECT* FROM #PagosConsorcio
-select *from pago.pago
+ALTER TABLE #PagosConsorcio
+	ADD idFormaPago INT
 
+--inserto un valor provisorio para importar a la tabla Pago.FormaDePago
+UPDATE P
+SET P.idFormaPago = (
+    SELECT TOP 1 idFormaPago
+    FROM Pago.FormaDePago
+)
+FROM #PagosConsorcio AS P;
 
-   INSERT INTO Pago.Pago(fecha ,importe , cbuCuentaOrigen )
-   select fecha, valor,CVU_CBU
+   INSERT INTO Pago.Pago(fecha ,importe , cbuCuentaOrigen, idFormaPago)
+   select fecha, valor,CVU_CBU,idFormaPago
    from #PagosConsorcio
    where idPago IS NOT NULL
+--select *from pago.pago
+--SELECT* FROM #PagosConsorcio
+DROP TABLE #PagosConsorcio	
+END
+GO
 
+CREATE OR ALTER	PROCEDURE Pago.generadorFormasDePago 
+AS
+BEGIN
+	IF NOT EXISTS (
+	SELECT descripcion
+	FROM Pago.FormaDePago a
+	WHERE a.descripcion='Transferencia' OR a.descripcion='Debito automatico'
+					)
+					BEGIN
+						INSERT INTO Pago.FormaDePago(descripcion)
+							VALUES('Transferencia'),
+							('Debito automatico')
+					END
 
+END
 
+EXEC Pago.generadorFormasDePago
+EXEC Pago.ImportacionPago
+
+select * from Pago.FormaDePago
