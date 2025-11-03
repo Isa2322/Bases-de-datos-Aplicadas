@@ -2,11 +2,12 @@
 
 # Miembros
 
-Hidalgo, Eduardo - 
+Hidalgo, Eduardo - EdH750
 Quispe, Milagros Soledad - 
 Puma, Florencia -
-Fontanet Caniza, Camila - 
+Fontanet Caniza, Camila - arcticami
 Altamiranda, Isaias Taiel - Isa2322
-Pastori, Ximena -
+Pastori, Ximena - pastoriximena
+
 
 
