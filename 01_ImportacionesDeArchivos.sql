@@ -191,3 +191,101 @@ GO
 
 EXEC Negocio.sp_ImportarGastosMensuales;
 go
+
+
+use [Com5600G11];
+GO
+DROP PROCEDURE IF EXISTS sp_ImportarInquilinosPropietarios;
+GO
+
+CREATE PROCEDURE sp_ImportarInquilinosPropietarios
+    @RutaArchivo VARCHAR(255)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    PRINT 'Iniciando importación de: ' + @RutaArchivo;
+
+-- Se eliminan las tablas si existen
+    DROP TABLE IF EXISTS Persona.CuentaBancaria;
+    DROP TABLE IF EXISTS Persona.Persona;
+
+-- Se crean de nuevo
+    CREATE TABLE Persona.Persona (
+        ID INT IDENTITY(1,1) PRIMARY KEY, 
+        DNI INT,
+        Nombre VARCHAR(30),
+        Apellido VARCHAR(30),
+        CBU VARCHAR(22),
+        Telefono INT,
+        Email VARCHAR(50),
+        Tipo VARCHAR(20),
+    );
+    CREATE TABLE Persona.CuentaBancaria (
+        CBU VARCHAR(22) PRIMARY KEY,
+        Banco VARCHAR(100) NULL,
+        TitularId INT NULL,
+        CONSTRAINT FK_Cuenta_Titular
+        FOREIGN KEY (TitularId) REFERENCES Persona.Persona(ID)
+    );
+
+-- Tabla temporal para importacion
+    DROP TABLE IF EXISTS ImportTemp;
+
+    CREATE TABLE ImportTemp (
+        Nombre VARCHAR(30),
+        Apellido VARCHAR(30),
+        DNI INT,
+        Email VARCHAR(50),
+        Telefono INT,
+        CBU VARCHAR(22),
+        Tipo VARCHAR(20)
+    );
+
+-- bulk insert
+    DECLARE @sql NVARCHAR(MAX);
+
+    SET @sql = '
+        BULK INSERT ImportTemp
+        FROM ''' + @RutaArchivo + '''
+        WITH
+        (
+            FIELDTERMINATOR = '';'',
+            ROWTERMINATOR = ''\n'',
+            CODEPAGE = ''ACP'',
+            FIRSTROW = 2
+        );';
+
+    EXEC(@sql);
+
+--borrar nulos
+    DELETE FROM ImportTemp
+WHERE 
+    (Nombre IS NULL OR Nombre = '') AND
+    (Apellido IS NULL OR Apellido = '') AND
+    (DNI IS NULL OR DNI = '') AND
+    (Email IS NULL OR Email = '') AND
+    (Telefono IS NULL OR Telefono = '') AND
+    (CBU IS NULL OR CBU = '') AND
+    (Tipo IS NULL OR Tipo = '');
+
+-- Se insertan los archivos en las tablas correspondientes
+    INSERT INTO Persona.Persona (DNI, Nombre, Apellido, CBU, Telefono, Email, Tipo)
+    SELECT DNI, Nombre, Apellido, CBU, Telefono, Email, Tipo
+    FROM ImportTemp;
+
+    -- join de persona y cuenta bancaria por CBU para insertar con la FK
+    INSERT INTO Persona.CuentaBancaria (CBU, TitularId)
+    SELECT DISTINCT it.CBU, p.ID
+    FROM dbo.ImportTemp it
+    JOIN Persona.Persona p ON p.CBU = it.CBU
+    WHERE it.CBU IS NOT NULL AND it.CBU <> '';
+
+END;
+GO
+
+EXEC sp_ImportarInquilinosPropietarios 
+    @RutaArchivo = 'C:\Users\Abigail\Downloads\consorcios\Inquilino-propietarios-datos.csv';
+
+
+    select * from Persona.Persona
