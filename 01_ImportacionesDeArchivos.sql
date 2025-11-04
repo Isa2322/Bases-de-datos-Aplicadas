@@ -203,7 +203,25 @@ CREATE PROCEDURE sp_ImportarInquilinosPropietarios
     @RutaArchivo VARCHAR(255)
 AS
 BEGIN
+
+DECLARE @Carpeta VARCHAR(255) = 'C:\Users\Abigail\Downloads\consorcios\';
+DECLARE @RutaCompleta  NVARCHAR(4000);
     SET NOCOUNT ON;
+
+    IF CHARINDEX('..', @RutaArchivo) > 0
+    OR CHARINDEX(';', @RutaArchivo) > 0
+    OR CHARINDEX('--', @RutaArchivo) > 0
+    OR CHARINDEX('/*', @RutaArchivo) > 0
+    OR CHARINDEX('/', @RutaArchivo) > 0 
+    OR CHARINDEX('\', @RutaArchivo) > 0 
+    OR PATINDEX('%[;''"%]%', @RutaArchivo) > 0 
+BEGIN
+    RAISERROR('Nombre de archivo contiene caracteres invalidos.', 16, 1); RETURN;
+END
+IF RIGHT(LOWER(@RutaArchivo),4) <> '.csv'
+BEGIN
+    RAISERROR('Solo se permiten archivos .csv', 16, 1); RETURN;
+END
 
     PRINT 'Iniciando importación de: ' + @RutaArchivo;
 
@@ -220,7 +238,7 @@ BEGIN
         CBU VARCHAR(22),
         Telefono BIGINT,
         Email NVARCHAR(60),
-        Tipo VARCHAR(20),
+        Tipo VARCHAR(20)
     );
     CREATE TABLE Persona.CuentaBancaria (
         CBU VARCHAR(22) PRIMARY KEY,
@@ -243,12 +261,16 @@ BEGIN
         Tipo VARCHAR(20)
     );
 
+    SET @RutaCompleta = @Carpeta + @RutaArchivo;
+
 -- bulk insert
     DECLARE @sql NVARCHAR(MAX);
 
+    PRINT 'Iniciando importación de: ' + @RutaCompleta;
+
     SET @sql = '
         BULK INSERT TemporalPersonas
-        FROM ''' + @RutaArchivo + '''
+        FROM ''' + REPLACE(@RutaCompleta, '''', '''''') + '''
         WITH
         (
             FIELDTERMINATOR = '';'',
@@ -261,24 +283,24 @@ BEGIN
 
 --borrar nulos
     DELETE FROM TemporalPersonas
-WHERE 
-    (Nombre IS NULL OR Nombre = '') AND
-    (Apellido IS NULL OR Apellido = '') AND
-    (DNI IS NULL OR DNI = '') AND
-    (Email IS NULL OR Email = '') AND
-    (Telefono IS NULL OR Telefono = '') AND
-    (CBU IS NULL OR CBU = '') AND
-    (Tipo IS NULL OR Tipo = '');
+        WHERE 
+        (Nombre IS NULL OR Nombre = '') AND
+        (Apellido IS NULL OR Apellido = '') AND
+        (DNI IS NULL OR DNI = '') AND
+        (Email IS NULL OR Email = '') AND
+        (Telefono IS NULL OR Telefono = '') AND
+        (CBU IS NULL OR CBU = '') AND
+        (Tipo IS NULL OR Tipo = '');
 
 
 -- Se insertan los archivos en las tablas correspondientes
 
-DELETE FROM TemporalPersonas
-WHERE CBU IN (
-    SELECT CBU
-    FROM TemporalPersonas
-    GROUP BY CBU
-    HAVING COUNT(*) > 1
+    DELETE FROM TemporalPersonas
+    WHERE CBU IN (
+        SELECT CBU
+        FROM TemporalPersonas
+        GROUP BY CBU
+        HAVING COUNT(*) > 1
 );
 
     INSERT INTO Persona.Persona (DNI, Nombre, Apellido, CBU, Telefono, Email, Tipo)
@@ -302,15 +324,15 @@ WHERE CBU IN (
     WHERE it.CBU IS NOT NULL AND it.CBU <> '';
 
 
-    DROP TABLE TemporalPersonas
+    DROP TABLE IF EXISTS dbo.TemporalPersonas
 END;
 GO
 
 EXEC sp_ImportarInquilinosPropietarios 
-    @RutaArchivo = 'C:\Users\Abigail\Downloads\consorcios\Inquilino-propietarios-datos.csv';
+    @RutaArchivo = 'Inquilino-propietarios-datos.csv';
 
 
- --   select * from Persona.Persona
- --   select * from persona.CuentaBancaria
+   select * from Persona.Persona
+    select * from persona.CuentaBancaria
 
  -- FIN IMPORTACION DE PERSONAS
