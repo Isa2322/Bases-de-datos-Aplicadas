@@ -14,6 +14,49 @@ Pastori, Ximena - 42300128*/
 USE [Com5600G11]; 
 GO
 
+-- FORMAS DE PAGO
+
+IF OBJECT_ID('SP_CrearYcargar_FormasDePago_Semilla', 'P') IS NOT NULL
+    DROP PROCEDURE SP_CrearYcargar_FormasDePago_Semilla
+GO
+
+CREATE PROCEDURE SP_CrearYcargar_FormasDePago_Semilla
+AS
+BEGIN
+    
+    PRINT N'Insertando/Verificando datos semilla en Pago.FormaDePago...';
+
+    -- Transferencia Bancaria (más común para el CVU/CBU)
+    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Transferencia Bancaria')
+    BEGIN
+        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
+        VALUES ('Transferencia Bancaria', 'Comprobante');
+    END
+
+    -- Pago en Efectivo (si aplica en la administración)
+    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Efectivo en Oficina')
+    BEGIN
+        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
+        VALUES ('Efectivo en Oficina', 'Recibo Manual');
+    END
+
+    -- Pago Electrónico (Mercado Pago, otros)
+    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Mercado Pago/Billetera')
+    BEGIN
+        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
+        VALUES ('Mercado Pago/Billetera', 'ID de Transacción');
+    END
+
+    PRINT N'Carga de datos de Formas de Pago finalizada.';
+
+END
+GO
+
+EXEC SP_CrearYcargar_FormasDePago_Semilla;
+GO
+
+
+
 -- servicios.servicios.json
 
 -- Función de Limpieza: Crea un nuevo lote con GO
