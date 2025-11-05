@@ -14,90 +14,53 @@ Pastori, Ximena - 42300128*/
 USE [Com5600G11]; 
 GO
 
+-- FORMAS DE PAGO
 
--- servicios.servicios.json
+IF OBJECT_ID('SP_CrearYcargar_FormasDePago_Semilla', 'P') IS NOT NULL
+    DROP PROCEDURE SP_CrearYcargar_FormasDePago_Semilla
+GO
 
--- Funci�n de Limpieza: Crea un nuevo lote con GO
-IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Operaciones.LimpiarNumero;
-use [Com5600G11];
-go 
+CREATE PROCEDURE SP_CrearYcargar_FormasDePago_Semilla
+AS
+BEGIN
+    
+    PRINT N'Insertando/Verificando datos semilla en Pago.FormaDePago...';
 
-CREATE OR ALTER PROCEDURE Pago.ImportacionPago
-	AS
-	BEGIN
+    -- Transferencia Bancaria (m�s com�n para el CVU/CBU)
+    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Transferencia Bancaria')
+    BEGIN
+        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
+        VALUES ('Transferencia Bancaria', 'Comprobante');
+    END
 
-	SET NOCOUNT ON;
+    -- Pago en Efectivo (si aplica en la administraci�n)
+    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Efectivo en Oficina')
+    BEGIN
+        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
+        VALUES ('Efectivo en Oficina', 'Recibo Manual');
+    END
 
-	CREATE TABLE #PagosConsorcio (idPago int , fecha VARCHAR(10),CVU_CBU VARCHAR(22),valor varchar (12))
+    -- Pago Electr�nico (Mercado Pago, otros)
+    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Mercado Pago/Billetera')
+    BEGIN
+        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
+        VALUES ('Mercado Pago/Billetera', 'ID de Transacci�n');
+    END
 
-	BULK INSERT #PagosConsorcio
-	FROM 'C:\consorcios\pagos_consorcios.csv'
-	WITH(
-		FIELDTERMINATOR = ',', -- Especifica el delimitador de campo (coma en un archivo CSV)
-		ROWTERMINATOR = '\n', -- Especifica el terminador de fila (salto de linea en un archivo CSV)
-		CODEPAGE = 'ACP',-- Especifica la pagina de codigos del archivo
-		FIRSTROW=2
-		)
-		
+    PRINT N'Carga de datos de Formas de Pago finalizada.';
 
-DELETE FROM #PagosConsorcio-- Elimino las filas nulas en caso de que se generen
-WHERE 
-    idPago IS NULL
-    AND fecha IS NULL
-    AND CVU_CBU IS NULL
-	AND valor IS NULL;
-
-
---Preparo los valores para cargar la tabla Pago.Pago 
-UPDATE #PagosConsorcio
-	SET valor = REPLACE(Valor, '$', '')
-
-
-UPDATE #PagosConsorcio
-	SET valor = CAST(valor AS DECIMAL(18,2))
-
-
-UPDATE #PagosConsorcio
-	SET fecha = CONVERT(DATE, fecha, 103)
-
-ALTER TABLE #PagosConsorcio
-	ADD idFormaPago INT
-
---inserto un valor provisorio para importar a la tabla Pago.FormaDePago
-UPDATE P
-SET P.idFormaPago = (
-    SELECT TOP 1 idFormaPago
-    FROM Pago.FormaDePago
-)
-FROM #PagosConsorcio AS P;
-
-   INSERT INTO Pago.Pago(fecha ,importe , cbuCuentaOrigen, idFormaPago)
-   select fecha, valor,CVU_CBU,idFormaPago
-   from #PagosConsorcio
-   where idPago IS NOT NULL
---select *from pago.pago
---SELECT* FROM #PagosConsorcio
-DROP TABLE #PagosConsorcio	
 END
 GO
 
-CREATE OR ALTER	PROCEDURE Pago.generadorFormasDePago 
-AS
-BEGIN
-	IF NOT EXISTS (
-	SELECT descripcion
-	FROM Pago.FormaDePago a
-	WHERE a.descripcion='Transferencia' OR a.descripcion='Debito automatico'
-					)
-					BEGIN
-						INSERT INTO Pago.FormaDePago(descripcion)
-							VALUES('Transferencia'),
-							('Debito automatico')
-					END
+EXEC SP_CrearYcargar_FormasDePago_Semilla;
+GO
 
-END
+-- servicios.servicios.json
 
-EXEC Pago.generadorFormasDePago
+use [Com5600G11];
+go 
+
+
 EXEC Pago.ImportacionPago
 
 select * from Pago.FormaDePago
@@ -105,7 +68,7 @@ select * from Pago.FormaDePago
 IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Negocio.LimpiarNumero;
 GO
 
-CREATE FUNCTION Operaciones.LimpiarNumero (@ImporteVarchar VARCHAR(50))
+CREATE FUNCTION Negocio.LimpiarNumero (@ImporteVarchar VARCHAR(50))
 RETURNS DECIMAL(18, 2)
 AS
 BEGIN
@@ -127,17 +90,13 @@ BEGIN
 END;
 GO
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarGastosMensuales
-( 
-    @ruta VARCHAR(500) 
-)
+CREATE or ALTER PROCEDURE Negocio.sp_ImportarGastosMensuales
+--( @ruta VARCHAR(500) )
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @sql NVARCHAR(MAX);
-
-    -- Tabla temporal
+    -- tabla temporal
     IF OBJECT_ID('tempdb..#TemporalDatosServicio') IS NOT NULL
     BEGIN
         DROP TABLE #TemporalDatosServicio;
@@ -150,68 +109,78 @@ BEGIN
         Importe DECIMAL(18, 2)
     );
 
-    -- La variable @ruta debe concatenarse para formar la cadena literal del BULK
-    SET @sql = N'
+    
+
+    -- 1- importar el archivo json
     INSERT INTO #TemporalDatosServicio (NombreConsorcio, Mes, TipoGastoBruto, Importe)
     SELECT
         J.NombreConsorcio,
         J.Mes,
         T.TipoGastoBruto,
         Negocio.LimpiarNumero(T.ImporteBruto) 
-    FROM OPENROWSET (BULK ''' + @ruta + ''', SINGLE_CLOB) AS jr
-    CROSS APPLY OPENJSON(BulkColumn)
-    WITH (
-        NombreConsorcio VARCHAR(100) ''$."Nombre del consorcio"'',
-        Mes             VARCHAR(20)  ''$.Mes'',
-        BANCARIOS       VARCHAR(50)  ''$.BANCARIOS'',
-        LIMPIEZA        VARCHAR(50)  ''$.LIMPIEZA'',
-        ADMINISTRACION  VARCHAR(50)  ''$.ADMINISTRACION'',
-        SEGUROS         VARCHAR(50)  ''$.SEGUROS'',
-        GASTOS_GRALES   VARCHAR(50)  ''$."GASTOS GENERALES"'',
-        AGUA            VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Agua"'',
-        LUZ             VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Luz"''
-    ) AS J
+        FROM OPENROWSET (BULK 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Servicios.Servicios.json', SINGLE_CLOB) as jr
+        CROSS APPLY OPENJSON(BulkColumn)
+        WITH (
+            NombreConsorcio VARCHAR(100) '$."Nombre del consorcio"',
+            Mes             VARCHAR(20)  '$.Mes',
+
+            -- aca se encuentra el importe d cada servicio
+            BANCARIOS       VARCHAR(50)  '$.BANCARIOS',
+            LIMPIEZA        VARCHAR(50)  '$.LIMPIEZA',
+            ADMINISTRACION  VARCHAR(50)  '$.ADMINISTRACION',
+            SEGUROS         VARCHAR(50)  '$.SEGUROS',
+            GASTOS_GRALES   VARCHAR(50)  '$."GASTOS GENERALES"',
+            AGUA            VARCHAR(50)  '$."SERVICIOS PUBLICOS-Agua"',
+            LUZ             VARCHAR(50)  '$."SERVICIOS PUBLICOS-Luz"'
+        ) AS J
     CROSS APPLY (VALUES 
-        (''BANCARIOS'', J.BANCARIOS),
-        (''LIMPIEZA'', J.LIMPIEZA),
-        (''ADMINISTRACION'', J.ADMINISTRACION),
-        (''SEGUROS'', J.SEGUROS),
-        (''GASTOS GENERALES'', J.GASTOS_GRALES),
-        (''SERVICIOS PUBLICOS-Agua'', J.AGUA), 
-        (''SERVICIOS PUBLICOS-Luz'', J.LUZ)     
+        ('BANCARIOS', J.BANCARIOS),
+        ('LIMPIEZA', J.LIMPIEZA),
+        ('ADMINISTRACION', J.ADMINISTRACION),
+        ('SEGUROS', J.SEGUROS),
+        ('GASTOS GENERALES', J.GASTOS_GRALES),
+        ('SERVICIOS PUBLICOS-Agua', J.AGUA), 
+        ('SERVICIOS PUBLICOS-Luz', J.LUZ)    
     ) AS T (TipoGastoBruto, ImporteBruto)
     WHERE Negocio.LimpiarNumero(T.ImporteBruto) IS NOT NULL 
-        AND Negocio.LimpiarNumero(T.ImporteBruto) > 0;
+          AND Negocio.LimpiarNumero(T.ImporteBruto) > 0;
 
-    SELECT * FROM #TemporalDatosServicio;';
+    select * from #TemporalDatosServicio;
 
-    EXEC sp_executesql @sql
-    
-    -- almacenar a Negocio.GastoOrdinario
 
  
     -- 2- almacenar a Negocio.GastoOrdinario (Busqueda de FK y Mapeo)
     
     INSERT INTO Negocio.GastoOrdinario (
-        idExpensa, 
-        nombreEmpresaoPersona, 
-        nroFactura, 
-        fechaEmision, 
-        importeTotal, 
-        detalle, 
-        tipoServicio
+        idExpensa, nombreEmpresaoPersona, nroFactura, fechaEmision, importeTotal, detalle, tipoServicio
     )
     SELECT
-        -- idExpensa: Búsqueda de FK
-        E.id AS idExpensa, 
+        -- idExpensa
+        (
+            SELECT TOP 1 E.id
+            FROM Negocio.Expensa AS E
+            INNER JOIN Consorcio.Consorcio AS CM ON E.idConsorcio = CM.idConsorcio
+            WHERE CM.NombreConsorcio = S.NombreConsorcio 
+              AND E.PeriodoMes = LTRIM(RTRIM(S.Mes)) -- elimina espacios en blanco 
+        ) AS idExpensa, 
+        
+        /*
+        -- idConsorcio
+        (
+            SELECT TOP 1 CM.idConsorcio
+            FROM Consorcio.Consorcio AS CM
+            WHERE CM.NombreConsorcio = S.NombreConsorcio
+        ) AS idConsorcio, */
+        
+        -- nombreEmpresaoPersona
+        CASE S.TipoGastoBruto
+            WHEN 'SERVICIOS PUBLICOS-Agua' THEN 'AYSA' 
+            WHEN 'SERVICIOS PUBLICOS-Luz'  THEN 'EDENOR' 
+            ELSE S.TipoGastoBruto 
+        END AS nombreEmpresaoPersona,
 
-        -- nombreEmpresaoPersona: Lógica de proveedor
-        S.TipoGastoBruto AS nombreEmpresaoPersona,
-
-        -- nroFactura: Generación de factura (aleatoria/checksum)
+        -- nroFactura
         CAST(ABS(CHECKSUM(NEWID() + CAST(@@SPID AS VARCHAR(10)))) AS VARCHAR(50)) AS nroFactura,
-    
-        -- fechaEmision: Calculo de fecha
         
         -- fechaEmision (asumo que el ano es actual)
         DATEFROMPARTS(YEAR(GETDATE()), 
@@ -228,30 +197,21 @@ BEGIN
         S.Importe AS importeTotal,
 
         -- detalle
-        null AS detalle,
-    
-        -- tipoServicio
-        S.TipoGastoBruto AS tipoServicio
+        'Gasto mensual - ' + S.TipoGastoBruto AS detalle,
+        
+        -- tipoServicio (unificado el servicio publico)
+        CASE S.TipoGastoBruto
+            WHEN 'SERVICIOS PUBLICOS-Agua' THEN 'SERVICIOS PUBLICOS'
+            WHEN 'SERVICIOS PUBLICOS-Luz'  THEN 'SERVICIOS PUBLICOS'
+            ELSE S.TipoGastoBruto 
+        END AS tipoServicio
 
     FROM #TemporalDatosServicio AS S
-
-    -- unir la tabla temporal con la Expensa para obtener el id
-    CROSS APPLY (
-        SELECT TOP 1 E.id, CM.nombre 
-        FROM Negocio.Expensa AS E
-        INNER JOIN Consorcio.Consorcio AS CM ON E.consorcio_id = CM.idConsorcio 
-        WHERE CM.nombre = S.NombreConsorcio and
-        E.fechaPeriodo = E.periodo = LTRIM(RTRIM(S.Mes))
-    ) AS E (id, NombreConsorcio_FK)
-
-    -- evita duplicados si los encuentra ya en la tabla
     WHERE NOT EXISTS (
+
+       -- busca duplicados
         SELECT 1 
         FROM Negocio.GastoOrdinario AS GO
-        -- Condición de unicidad: Debe coincidir el idExpensa
-        WHERE GO.idExpensa = E.id
-        -- Y debe coincidir el tipo de servicio para el mismo período
-        AND GO.tipoServicio = S.TipoGastoBruto
         WHERE GO.nombreEmpresaoPersona = (
              CASE S.TipoGastoBruto WHEN 'SERVICIOS PUBLICOS-Agua' THEN 'AYSA' 
                                    WHEN 'SERVICIOS PUBLICOS-Luz' THEN 'EDENOR' 
@@ -264,21 +224,23 @@ BEGIN
         )
 
     )
-    -- Se asegura de que la FK (E.id) se haya encontrado
-    AND E.id IS NOT NULL;    
+    -- Se inserta solo si ambas FK (idExpensa) se encuentran
+    AND (SELECT TOP 1 E.id FROM Negocio.Expensa AS E 
+         INNER JOIN Consorcio.ConsorcioAS CM ON E.idConsorcio = CM.idConsorcio
+         WHERE CM.NombreConsorcio = S.NombreConsorcio AND E.PeriodoMes = LTRIM(RTRIM(S.Mes))) IS NOT NULL;
     
-    -- eliminar la tabla temporal
+
+
+    -- 3- eliminar la tabla temporal
     DROP TABLE #TemporalDatosServicio;
+
+    */ 
 
 END
 GO
 
--- Ejemplo de ejecución:
- EXEC Operaciones.sp_ImportarGastosMensuales @ruta = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Servicios.Servicios.json';
- go
- select * from [Negocio].[GastoOrdinario];
-
-
+EXEC Negocio.sp_ImportarGastosMensuales;
+go
 
 -- IMPORTACION DE PERSONAS
 
