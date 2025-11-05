@@ -280,6 +280,32 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'Consorcio.CuentaBancaria','U') IS NULL
+BEGIN
+	CREATE TABLE Consorcio.CuentaBancaria(
+		CVU_CBU CHAR(22) PRIMARY KEY,
+		nombreTitular CHAR(22),
+		saldo DECIMAL(10,2)
+		)
+END
+GO
+
+IF OBJECT_ID(N'Consorcio.Consorcio','U') IS NULL
+BEGIN
+	CREATE TABLE Consorcio.Consorcio(
+		id INT IDENTITY(1,1),
+		nombre VARCHAR(100) NOT NULL,
+		CVU_CBU CHAR(22),
+		direccion VARCHAR(200) NOT NULL,
+		metrosCuadradosTotal DECIMAL(10,2),
+		CONSTRAINT PK_id PRIMARY KEY(id),
+		CONSTRAINT FK_CVU_CBU FOREIGN KEY (CVU_CBU) 
+		REFERENCES Consorcio.CuentaBancaria(CVU_CBU)
+		)
+
+END
+GO
+
 IF OBJECT_ID(N'Pago.PagoAplicado', 'U') IS NULL
 BEGIN
     CREATE TABLE Pago.PagoAplicado (
