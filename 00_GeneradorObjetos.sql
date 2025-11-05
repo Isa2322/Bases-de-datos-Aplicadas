@@ -107,22 +107,29 @@ BEGIN
 END
 GO
 
-
-IF OBJECT_ID(N'Persona.CuentaBancaria', 'U') IS NULL
+IF OBJECT_ID(N'Consorcio.CuentaBancaria','U') IS NULL
 BEGIN
-    CREATE TABLE Persona.CuentaBancaria (
-        CVU_CBU CHAR(22) PRIMARY KEY NOT NULL,
-        idPersona INT NULL 
-    );
+	CREATE TABLE Consorcio.CuentaBancaria(
+		CVU_CBU CHAR(22) PRIMARY KEY,
+		nombreTitular CHAR(22),
+		saldo DECIMAL(10,2)
+		)
 END
 GO
 
-IF OBJECT_ID(N'Consorcio.ConsorcioMaster', 'U') IS NULL
+IF OBJECT_ID(N'Consorcio.Consorcio','U') IS NULL
 BEGIN
-    CREATE TABLE Consorcio.ConsorcioMaster (
-        idConsorcio INT PRIMARY KEY IDENTITY,
-        nombre VARCHAR(100) NOT NULL
-    );
+	CREATE TABLE Consorcio.Consorcio(
+		id INT IDENTITY(1,1),
+		nombre VARCHAR(100) NOT NULL,
+		CVU_CBU CHAR(22),
+		direccion VARCHAR(200) NOT NULL,
+		metrosCuadradosTotal DECIMAL(10,2),
+		CONSTRAINT PK_id PRIMARY KEY(id),
+		CONSTRAINT FK_CVU_CBU FOREIGN KEY (CVU_CBU) 
+		REFERENCES Consorcio.CuentaBancaria(CVU_CBU)
+		)
+
 END
 GO
 
@@ -275,32 +282,6 @@ BEGIN
         CONSTRAINT FK_Baulera_UnidadFuncional FOREIGN KEY (unidadFuncionalId) 
             REFERENCES Consorcio.UnidadFuncional(id)
     );
-END
-GO
-
-IF OBJECT_ID(N'Consorcio.CuentaBancaria','U') IS NULL
-BEGIN
-	CREATE TABLE Consorcio.CuentaBancaria(
-		CVU_CBU CHAR(22) PRIMARY KEY,
-		nombreTitular CHAR(22),
-		saldo DECIMAL(10,2)
-		)
-END
-GO
-
-IF OBJECT_ID(N'Consorcio.Consorcio','U') IS NULL
-BEGIN
-	CREATE TABLE Consorcio.Consorcio(
-		id INT IDENTITY(1,1),
-		nombre VARCHAR(100) NOT NULL,
-		CVU_CBU CHAR(22),
-		direccion VARCHAR(200) NOT NULL,
-		metrosCuadradosTotal DECIMAL(10,2),
-		CONSTRAINT PK_id PRIMARY KEY(id),
-		CONSTRAINT FK_CVU_CBU FOREIGN KEY (CVU_CBU) 
-		REFERENCES Consorcio.CuentaBancaria(CVU_CBU)
-		)
-
 END
 GO
 
