@@ -125,69 +125,39 @@ BEGIN
 END
 GO
 
-DROP TABLE IF EXISTS Pago.FormaDePago
-GO
-
-CREATE TABLE Pago.FormaDePago (
-    idFormaPago INT IDENTITY(1,1) NOT NULL,
-    
-    descripcion VARCHAR(50) NOT NULL,
-    
-    confirmacion VARCHAR(20) NULL, 
-    
-    CONSTRAINT PK_FormaDePago PRIMARY KEY CLUSTERED (idFormaPago)
-);
-GO
-
-DROP TABLE IF EXISTS Pago.Pago
-GO
-CREATE TABLE Pago.Pago (
-    id INT IDENTITY(1,1) NOT NULL,
-    
-    idFormaPago INT NOT NULL, 
-    
-    cbuCuentaOrigen VARCHAR(50) NOT NULL, 
-    
-    fecha DATETIME2(0) NOT NULL DEFAULT GETDATE(),
-    
-    importe DECIMAL(18, 2) NOT NULL, 
-    
-    CONSTRAINT PK_Pago PRIMARY KEY CLUSTERED (id),
-    
-    CONSTRAINT FK_Pago_FormaDePago FOREIGN KEY (idFormaPago)
-        REFERENCES Pago.FormaDePago (idFormaPago)
-);
-GO
-
-DROP TABLE IF EXISTS Pago.PagoAplicado
-GO
-CREATE TABLE Pago.PagoAplicado (
-    idPago INT NOT NULL, 
-    
-    idDetalleExpensa INT NOT NULL, 
-    
-    importeAplicado DECIMAL(18, 2) NOT NULL, 
-    
-    CONSTRAINT PK_PagoAplicado PRIMARY KEY CLUSTERED (idPago, idDetalleExpensa),
-    
-    CONSTRAINT FK_PagoAplicado_Pago FOREIGN KEY (idPago)
-    REFERENCES Pago.Pago (id),
-    --CONSTRAINT FK_PagoAplicado_DetalleExpensa FOREIGN KEY (idDetalleExpensa)
-    --REFERENCES Consorcio.DetalleExpensa (idDetalleExpensa)
-);
-GO
 
 
 -- Nos fijamos que no exista antes de crear la tabla Expensa para la FK
-IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'Negocio.Expensa') AND type = 'U')
-BEGIN
-    CREATE TABLE Negocio.Expensa (
-        id INT PRIMARY KEY IDENTITY,
-        idConsorcio INT NULL,
-        periodo NVARCHAR(50) NULL
-    )
-END
-GO
+DROP TABLE IF EXISTS Negocio.Expensa;
+CREATE TABLE Negocio.Expensa(
+    id INT PRIMARY KEY,
+    consorcio_id INT,
+    saldoAnterior DECIMAL(10,2),
+    ingresosEnTermino DECIMAL(10,2),
+    ingresosAdeudados DECIMAL(10,2),
+    ingresosAdelantados DECIMAL(10,2),
+    egresos DECIMAL(10,2),
+    saldoCierre DECIMAL(10,2),
+    FOREIGN KEY (consorcio_id) REFERENCES Negocio.Consorcio(id)
+);
+
+
+DROP TABLE IF EXISTS Negocio.DetalleExpensa;
+CREATE TABLE Negocio.DetalleExpensa(
+    id INT PRIMARY KEY,
+    expensaId INT,
+    idUnidadFuncional INT,
+    prorrateoOrdinario DECIMAL(10,2),
+    prorrateoExtraordinario DECIMAL(10,2),
+    interesMora DECIMAL(10,2),
+    totalaPagar DECIMAL(10,2),
+    saldoAnteriorAbonado DECIMAL(10,2),
+    pagosRecibidos DECIMAL(10,2),
+    primerVencimiento DATE,
+    segundoVencimiento DATE,
+    FOREIGN KEY (expensaId) REFERENCES Negocio.Expensa(id),
+    FOREIGN KEY (idUnidadFuncional) REFERENCES Consorcio.UnidadFuncional(id)
+);
 
 
 IF OBJECT_ID(N'Negocio.GastoOrdinario', 'U') IS NULL
@@ -287,4 +257,56 @@ BEGIN
 END
 ELSE
     PRINT N'Ya existe la tabla Consorcio.Baulera.';
+GO
+
+DROP TABLE IF EXISTS Pago.FormaDePago
+GO
+
+CREATE TABLE Pago.FormaDePago (
+    idFormaPago INT IDENTITY(1,1) NOT NULL,
+    
+    descripcion VARCHAR(50) NOT NULL,
+    
+    confirmacion VARCHAR(20) NULL, 
+    
+    CONSTRAINT PK_FormaDePago PRIMARY KEY CLUSTERED (idFormaPago)
+);
+GO
+
+DROP TABLE IF EXISTS Pago.Pago
+GO
+CREATE TABLE Pago.Pago (
+    id INT IDENTITY(1,1) NOT NULL,
+    
+    idFormaPago INT NOT NULL, 
+    
+    cbuCuentaOrigen VARCHAR(50) NOT NULL, 
+    
+    fecha DATETIME2(0) NOT NULL DEFAULT GETDATE(),
+    
+    importe DECIMAL(18, 2) NOT NULL, 
+    
+    CONSTRAINT PK_Pago PRIMARY KEY CLUSTERED (id),
+    
+    CONSTRAINT FK_Pago_FormaDePago FOREIGN KEY (idFormaPago)
+        REFERENCES Pago.FormaDePago (idFormaPago)
+);
+GO
+
+DROP TABLE IF EXISTS Pago.PagoAplicado
+GO
+CREATE TABLE Pago.PagoAplicado (
+    idPago INT NOT NULL, 
+    
+    idDetalleExpensa INT NOT NULL, 
+    
+    importeAplicado DECIMAL(18, 2) NOT NULL, 
+    
+    CONSTRAINT PK_PagoAplicado PRIMARY KEY CLUSTERED (idPago, idDetalleExpensa),
+    
+    CONSTRAINT FK_PagoAplicado_Pago FOREIGN KEY (idPago)
+    REFERENCES Pago.Pago (id),
+    --CONSTRAINT FK_PagoAplicado_DetalleExpensa FOREIGN KEY (idDetalleExpensa)
+    --REFERENCES Consorcio.DetalleExpensa (idDetalleExpensa)
+);
 GO
