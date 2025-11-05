@@ -48,7 +48,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- tabla temporal
+    -- tabla temporal para datos del json
     IF OBJECT_ID('tempdb..#TemporalDatosServicio') IS NOT NULL
     BEGIN
         DROP TABLE #TemporalDatosServicio;
@@ -60,9 +60,7 @@ BEGIN
         TipoGastoBruto VARCHAR(50), 
         Importe DECIMAL(18, 2)
     );
-
     
-
     -- 1- importar el archivo json
     INSERT INTO #TemporalDatosServicio (NombreConsorcio, Mes, TipoGastoBruto, Importe)
     SELECT
@@ -340,7 +338,7 @@ EXEC sp_ImportarInquilinosPropietarios
 
 
 --IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)
-CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcio @rutaArch VARCHAR(1000)
 AS
 BEGIN
 	--armo una temporal para guardar los datos
@@ -390,4 +388,63 @@ BEGIN
                 WHERE Final.nombre = Fuente.nombreCSV AND Final.direccion = Fuente.direccionCSV
             ) --basicamente aca se fija q para actualizar ya exista un consorcio con el mismo nombre y direccion y sino inserta uno nuevo
 
+
+
 END
+
+CREATE PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARCHAR(1000) 
+AS
+BEGIN
+	SET NOCOUNT ON
+	--pongo el nocount p q no salgan los mensajes de actualizacion
+	--tabla temporal p dropear los datos del archivo 
+    CREATE TABLE #TempProveedoresGasto 
+	(
+        tipoGastoCSV VARCHAR(100),
+        nombreConsorcioCSV VARCHAR(100),
+        nomEmpresaCSV VARCHAR(100),
+        detalleCSV VARCHAR(200)
+    );
+
+    BEGIN TRY
+        -- insert en sql dinamico pq sino no hay forma de hacer la ruta dinamica
+        DECLARE @sqlBulk VARCHAR(MAX);
+        SET @sqlBulk = '
+            BULK INSERT #TempProveedoresGasto
+            FROM ''' + @rutaArch + '''
+            WITH (
+                FIELDTERMINATOR = '';'',
+                ROWTERMINATOR = ''\n'',
+                FIRSTROW = 2, -- Asumo que tu CSV tiene encabezados
+                CODEPAGE = ''ACP''
+            );';
+        EXEC(@sqlBulk);
+
+        -- conexion de tablas para ver donde meter los datos
+
+        UPDATE GastoOrdinario
+        SET GastoOrdinario.nomEmpresaoPersona = T.nomEmpresaCSV, GastoOrdinario.detalle = T.detalleCSV
+        FROM 
+			GastoOrdinario
+        -- de GastoOrdinario a Expensa
+        JOIN
+            Expensa ON GastoOrdinario.idExpensa = Expensa.id
+        -- de Expensa a Consorcio
+        JOIN
+            Consorcio ON Expensa.consorcioId = Consorcio.id
+        -- de Consorcio y GastoOrdinario a la tabla temporal
+        JOIN
+            #TempProveedoresGasto AS T 
+            ON GastoOrdinario.tipoGasto = T.tipoGastoCSV  
+            AND Consorcio.nombre = T.nombreConsorcioCSV
+			--con esto me fijo q coincida el tipo de gasto con el nombre del consorcio para q identifique la expensa
+    END TRY
+	--cositas de seguridad por si se rompe algo
+    BEGIN CATCH
+        PRINT 'Error durante la actualización de gastos:' 
+        PRINT ERROR_MESSAGE();
+    END CATCH
+    DROP TABLE #TempProveedoresGasto;
+    SET NOCOUNT OFF;
+END;
+GO
