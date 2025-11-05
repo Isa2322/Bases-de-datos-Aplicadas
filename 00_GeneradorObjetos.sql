@@ -111,6 +111,20 @@ BEGIN
 END
 GO
 
+
+
+-- Nos fijamos que no exista antes de crearlo
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Negocio')
+BEGIN
+    EXEC('CREATE SCHEMA Negocio');
+    PRINT N'schema "Negocio" no existía: se creó correctamente.';
+END
+ELSE
+BEGIN
+    PRINT N'schema "Negocio" ya existe: no se creó nada.';
+END
+GO
+
 DROP TABLE IF EXISTS Pago.FormaDePago
 GO
 
