@@ -15,13 +15,6 @@ USE [Com5600G11];
 GO
 
 
--- servicios.servicios.json
-
--- Funci�n de Limpieza: Crea un nuevo lote con GO
-IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Operaciones.LimpiarNumero;
-use [Com5600G11];
-go 
-
 CREATE OR ALTER PROCEDURE Pago.ImportacionPago
 	AS
 	BEGIN
@@ -81,26 +74,9 @@ DROP TABLE #PagosConsorcio
 END
 GO
 
-CREATE OR ALTER	PROCEDURE Pago.generadorFormasDePago 
-AS
-BEGIN
-	IF NOT EXISTS (
-	SELECT descripcion
-	FROM Pago.FormaDePago a
-	WHERE a.descripcion='Transferencia' OR a.descripcion='Debito automatico'
-					)
-					BEGIN
-						INSERT INTO Pago.FormaDePago(descripcion)
-							VALUES('Transferencia'),
-							('Debito automatico')
-					END
 
-END
+-- servicios.servicios.json
 
-EXEC Pago.generadorFormasDePago
-EXEC Pago.ImportacionPago
-
-select * from Pago.FormaDePago
 -- Funcion de Limpieza: Crea un nuevo lote con GO
 IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Negocio.LimpiarNumero;
 GO
@@ -313,6 +289,8 @@ END
 
     PRINT 'Iniciando importaci�n de: ' + @RutaArchivo;
 
+
+---------------------------- ESTO NO VA ------------------------
 -- Se eliminan las tablas si existen
     DROP TABLE IF EXISTS Persona.CuentaBancaria;
     DROP TABLE IF EXISTS Persona.Persona;
