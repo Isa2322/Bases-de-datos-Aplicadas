@@ -208,6 +208,7 @@ ELSE
 GO
 
 IF OBJECT_ID(N'Negocio.GastoExtraordinario', 'U') IS NULL
+BEGIN
 CREATE TABLE Negocio.GastoExtraordinario (
     idGasto INT PRIMARY KEY IDENTITY,
     idExpensa INT NOT NULL, 
@@ -222,10 +223,13 @@ CREATE TABLE Negocio.GastoExtraordinario (
     CONSTRAINT FK_GastoExt_Expensa FOREIGN KEY (idExpensa) 
         REFERENCES Negocio.Expensa(id)
 )
+END
 ELSE
     PRINT N'Ya existe la tabla.'
 GO
 
+
+--UNIDAD FUNCIONAL
 IF OBJECT_ID(N'Consorcio.UnidadFuncional', 'U') IS NULL
 BEGIN
     CREATE TABLE Consorcio.UnidadFuncional
@@ -251,8 +255,7 @@ ELSE
     PRINT N'Ya existe la tabla Consorcio.UnidadFuncional.';
 GO
 
----
-
+---COCHERA
 IF OBJECT_ID(N'Consorcio.Cochera', 'U') IS NULL
 BEGIN
     CREATE TABLE Consorcio.Cochera
@@ -270,8 +273,7 @@ ELSE
     PRINT N'Ya existe la tabla Consorcio.Cochera.';
 GO
 
----
-
+--BAULERA
 IF OBJECT_ID(N'Consorcio.Baulera', 'U') IS NULL
 BEGIN
     CREATE TABLE Consorcio.Baulera
