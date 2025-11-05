@@ -14,6 +14,49 @@ Pastori, Ximena - 42300128*/
 USE [Com5600G11]; 
 GO
 
+-- FORMAS DE PAGO
+
+IF OBJECT_ID('SP_CrearYcargar_FormasDePago_Semilla', 'P') IS NOT NULL
+    DROP PROCEDURE SP_CrearYcargar_FormasDePago_Semilla
+GO
+
+CREATE PROCEDURE SP_CrearYcargar_FormasDePago_Semilla
+AS
+BEGIN
+    
+    PRINT N'Insertando/Verificando datos semilla en Pago.FormaDePago...';
+
+    -- Transferencia Bancaria (m�s com�n para el CVU/CBU)
+    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Transferencia Bancaria')
+    BEGIN
+        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
+        VALUES ('Transferencia Bancaria', 'Comprobante');
+    END
+
+    -- Pago en Efectivo (si aplica en la administraci�n)
+    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Efectivo en Oficina')
+    BEGIN
+        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
+        VALUES ('Efectivo en Oficina', 'Recibo Manual');
+    END
+
+    -- Pago Electr�nico (Mercado Pago, otros)
+    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Mercado Pago/Billetera')
+    BEGIN
+        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
+        VALUES ('Mercado Pago/Billetera', 'ID de Transacci�n');
+    END
+
+    PRINT N'Carga de datos de Formas de Pago finalizada.';
+
+END
+GO
+
+EXEC SP_CrearYcargar_FormasDePago_Semilla;
+GO
+
+
+
 -- servicios.servicios.json
 
 -- Funci�n de Limpieza: Crea un nuevo lote con GO
@@ -41,7 +84,7 @@ BEGIN
     RETURN NULL;
 END;
 GO
-/*
+
 CREATE or ALTER PROCEDURE Negocio.sp_ImportarGastosMensuales
 --( @ruta VARCHAR(500) )
 AS
@@ -101,6 +144,8 @@ BEGIN
 
 
  
+    -- 2- almacenar a Negocio.GastoOrdinario (B�squeda de FK y Mapeo)
+/* 
     -- 2- almacenar a Negocio.GastoOrdinario (B�squeda de FK y Mapeo)
     
     INSERT INTO Negocio.GastoOrdinario (
@@ -186,9 +231,10 @@ BEGIN
     -- 3- eliminar la tabla temporal
     DROP TABLE #TemporalDatosServicio;
 
+    */ 
+
 END
 GO
-*/
 
 EXEC Negocio.sp_ImportarGastosMensuales;
 go
@@ -335,9 +381,64 @@ EXEC sp_ImportarInquilinosPropietarios
 
    select * from Persona.Persona
     select * from persona.CuentaBancaria
-
+GO
  -- FIN IMPORTACION DE PERSONAS
- GO
+
+
+
+--IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
+AS
+BEGIN
+	--armo una temporal para guardar los datos
+	CREATE TABLE #TempConsorciosBulk 
+	( 
+		consorcioCSV VARCHAR(100),
+        nombreCSV VARCHAR(100),
+        direccionCSV VARCHAR(200),
+		cantUnidadesCSV INT,
+        superficieTotalCSV DECIMAL(10, 2)
+    );
+
+	--sql dinamico para encontrar la ruta
+	DECLARE @sqlBulk VARCHAR(1000)
+
+	SET @sqlBulk = 
+			'
+            BULK INSERT #TempConsorciosBulk
+            FROM ''' + @rutaArch + '''
+            WITH (
+                FIELDTERMINATOR = '';'',
+                ROWTERMINATOR = ''\n'',
+                FIRSTROW = 2,
+                CODEPAGE = ''65001''   
+            )
+			'
+    EXEC(@sqlBulk)
+	--Dsps de esto ya tendria todo insertado en la tabla temporal
+	--Ahora tengo q pasar las cosas a la tabla real
+	--Esta actualizacion se hace comparando con el nombre, si no encuentra una coincidencia del nombre en la tabla considera q tenes un consorcio nuevo y lo inserta
+	UPDATE Consorcio
+    SET direccion = Fuente.direccionCSV, metrosCuadradosTotal = Fuente.superficieTotalCSV
+    FROM Consorcio AS Final INNER JOIN #TempConsorciosBulk AS Fuente
+    ON Final.nombre = Fuente.nombreCSV
+    INSERT INTO Consorcio 
+	(
+         nombre,
+         direccion,
+         metrosCuadradosTotal
+    )
+    SELECT Fuente.nombreCSV, Fuente.direccionCSV, Fuente.superficieTotalCSV
+    FROM #TempConsorciosBulk AS Fuente
+	WHERE NOT EXISTS 
+			(
+                SELECT 1
+                FROM Consorcio AS Final
+                WHERE Final.nombre = Fuente.nombreCSV AND Final.direccion = Fuente.direccionCSV
+            ) --basicamente aca se fija q para actualizar ya exista un consorcio con el mismo nombre y direccion y sino inserta uno nuevo
+
+END
+GO
 
 
 CREATE OR ALTER PROCEDURE CargaInquilinoPropietariosUF
@@ -413,3 +514,4 @@ BEGIN
         INSERT (CVU_CBUPersona, numero, piso, departamento, consorcioId)
         VALUES (source.CVU_CBUPersona,  source.numero, source.piso, source.departamento, source.ID_Consorcio);
 END
+GO

@@ -1,3 +1,5 @@
+-- =============================================
+-- 4
 CREATE PROCEDURE Negocio.SP_ObtenerTop5MesesGastosIngresos
 AS
 BEGIN
@@ -85,3 +87,8 @@ BEGIN
     
 END
 GO
+
+EXEC Negocio.SP_ObtenerTop5MesesGastosIngresos;
+GO
+-- =============================================
+
