@@ -340,7 +340,7 @@ EXEC sp_ImportarInquilinosPropietarios
 
 
 --IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)
- CREATE OR ALTER PROCEDURE sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
 AS
 BEGIN
 	--armo una temporal para guardar los datos
