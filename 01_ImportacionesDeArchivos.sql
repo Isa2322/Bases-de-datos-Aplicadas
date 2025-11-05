@@ -41,7 +41,7 @@ BEGIN
     RETURN NULL;
 END;
 GO
-
+/*
 CREATE or ALTER PROCEDURE Negocio.sp_ImportarGastosMensuales
 --( @ruta VARCHAR(500) )
 AS
@@ -188,6 +188,7 @@ BEGIN
 
 END
 GO
+*/
 
 EXEC Negocio.sp_ImportarGastosMensuales;
 go
