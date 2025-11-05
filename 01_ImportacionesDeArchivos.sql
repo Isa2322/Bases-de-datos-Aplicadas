@@ -335,8 +335,6 @@ EXEC sp_ImportarInquilinosPropietarios
 
  -- FIN IMPORTACION DE PERSONAS
 
-
-
 --IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcio @rutaArch VARCHAR(1000)
 AS
