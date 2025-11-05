@@ -48,6 +48,8 @@ filesystem, basta con que el resultado de la consulta sea XML.
 respecto a optimización de codigo y de tipos de datos.
 */
 
+use master;
+drop database [Com5600G11];
 
 IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'Com5600G11')
 BEGIN
@@ -229,7 +231,7 @@ BEGIN
 END
 GO
 
-IF OBJECT_ID(N'Pago.Pago', 'U') IS NULL
+IF OBJECT_ID(N'Negocio.DetalleExpensa', 'U') IS NULL
 BEGIN
 CREATE TABLE Negocio.DetalleExpensa(
     id INT PRIMARY KEY,
