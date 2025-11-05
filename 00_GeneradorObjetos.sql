@@ -132,6 +132,37 @@ BEGIN
     PRINT N'schema "Pago" ya existe: no se creo nada.';
 END
 GO
+-- TABLA: Consorcio.TipoRol
+IF OBJECT_ID('Consorcio.TipoRol', 'U') IS NOT NULL
+    DROP TABLE Consorcio.TipoRol;
+GO
+
+CREATE TABLE Consorcio.TipoRol (
+    idTipoRol INT IDENTITY(1,1) PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL UNIQUE,
+    descripcion VARCHAR(200)
+);
+GO
+
+-- Tabla: Persona
+IF OBJECT_ID('Consorcio.Persona', 'U') IS NOT NULL
+    DROP TABLE Consorcio.Persona;
+GO
+
+CREATE TABLE Consorcio.Persona (
+    idPersona INT IDENTITY(1,1) PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    apellido VARCHAR(100) NOT NULL,
+    dni VARCHAR(20) NOT NULL UNIQUE,
+    email VARCHAR(150),
+    telefono VARCHAR(50),
+    cbu VARCHAR(22),
+    cvu VARCHAR(22),
+    idTipoRol INT NOT NULL,
+    CONSTRAINT FK_Consorcio_TipoRol FOREIGN KEY (idTipoRol) 
+        REFERENCES Consorcio.TipoRol(idTipoRol)
+);
+GO
 
 IF OBJECT_ID(N'Consorcio.CuentaBancaria','U') IS NULL
 BEGIN
