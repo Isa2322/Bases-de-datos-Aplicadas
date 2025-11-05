@@ -58,7 +58,6 @@ GO
 use [Com5600G11];
 go 
 
---CREACION ESQUEMAS
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Operaciones')
 BEGIN
     EXEC('CREATE SCHEMA Operaciones');
@@ -76,6 +75,7 @@ BEGIN
 END
 GO
 
+-- Nos fijamos que no exista antes de crearlo
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Negocio')
 BEGIN
     EXEC('CREATE SCHEMA Negocio');
@@ -109,7 +109,7 @@ BEGIN
 END
 GO
 
---CREACION TABLAS
+
 IF OBJECT_ID(N'Persona.CuentaBancaria', 'U') IS NULL
 BEGIN
     CREATE TABLE Persona.CuentaBancaria (
@@ -297,3 +297,5 @@ BEGIN
     );
 END
 GO
+
+-- este es el fin

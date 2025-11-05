@@ -14,6 +14,49 @@ Pastori, Ximena - 42300128*/
 USE [Com5600G11]; 
 GO
 
+-- FORMAS DE PAGO
+
+IF OBJECT_ID('SP_CrearYcargar_FormasDePago_Semilla', 'P') IS NOT NULL
+    DROP PROCEDURE SP_CrearYcargar_FormasDePago_Semilla
+GO
+
+CREATE PROCEDURE SP_CrearYcargar_FormasDePago_Semilla
+AS
+BEGIN
+    
+    PRINT N'Insertando/Verificando datos semilla en Pago.FormaDePago...';
+
+    -- Transferencia Bancaria (m�s com�n para el CVU/CBU)
+    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Transferencia Bancaria')
+    BEGIN
+        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
+        VALUES ('Transferencia Bancaria', 'Comprobante');
+    END
+
+    -- Pago en Efectivo (si aplica en la administraci�n)
+    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Efectivo en Oficina')
+    BEGIN
+        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
+        VALUES ('Efectivo en Oficina', 'Recibo Manual');
+    END
+
+    -- Pago Electr�nico (Mercado Pago, otros)
+    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Mercado Pago/Billetera')
+    BEGIN
+        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
+        VALUES ('Mercado Pago/Billetera', 'ID de Transacci�n');
+    END
+
+    PRINT N'Carga de datos de Formas de Pago finalizada.';
+
+END
+GO
+
+EXEC SP_CrearYcargar_FormasDePago_Semilla;
+GO
+
+
+
 -- servicios.servicios.json
 
 -- Funci�n de Limpieza: Crea un nuevo lote con GO
@@ -48,7 +91,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- tabla temporal para datos del json
+    -- tabla temporal
     IF OBJECT_ID('tempdb..#TemporalDatosServicio') IS NOT NULL
     BEGIN
         DROP TABLE #TemporalDatosServicio;
@@ -60,7 +103,9 @@ BEGIN
         TipoGastoBruto VARCHAR(50), 
         Importe DECIMAL(18, 2)
     );
+
     
+
     -- 1- importar el archivo json
     INSERT INTO #TemporalDatosServicio (NombreConsorcio, Mes, TipoGastoBruto, Importe)
     SELECT
@@ -99,6 +144,8 @@ BEGIN
 
 
  
+    -- 2- almacenar a Negocio.GastoOrdinario (B�squeda de FK y Mapeo)
+/* 
     -- 2- almacenar a Negocio.GastoOrdinario (B�squeda de FK y Mapeo)
     
     INSERT INTO Negocio.GastoOrdinario (
@@ -183,6 +230,8 @@ BEGIN
 
     -- 3- eliminar la tabla temporal
     DROP TABLE #TemporalDatosServicio;
+
+    */ 
 
 END
 GO
@@ -332,11 +381,13 @@ EXEC sp_ImportarInquilinosPropietarios
 
    select * from Persona.Persona
     select * from persona.CuentaBancaria
-
+GO
  -- FIN IMPORTACION DE PERSONAS
 
+
+
 --IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)
-CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcio @rutaArch VARCHAR(1000)
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
 AS
 BEGIN
 	--armo una temporal para guardar los datos
@@ -386,63 +437,81 @@ BEGIN
                 WHERE Final.nombre = Fuente.nombreCSV AND Final.direccion = Fuente.direccionCSV
             ) --basicamente aca se fija q para actualizar ya exista un consorcio con el mismo nombre y direccion y sino inserta uno nuevo
 
-
-
 END
---IMPORTAR DATOS DE PROVEEDORES
-CREATE PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARCHAR(1000) 
+GO
+
+
+CREATE OR ALTER PROCEDURE CargaInquilinoPropietariosUF
+    @RutaArchivo VARCHAR(255)
 AS
 BEGIN
-	SET NOCOUNT ON
-	--pongo el nocount p q no salgan los mensajes de actualizacion
-	--tabla temporal p dropear los datos del archivo 
-    CREATE TABLE #TempProveedoresGasto 
-	(
-        tipoGastoCSV VARCHAR(100),
-        nombreConsorcioCSV VARCHAR(100),
-        nomEmpresaCSV VARCHAR(100),
-        detalleCSV VARCHAR(200)
+    CREATE TABLE #CargaDatosTemp (
+        CVU_CBUPersona CHAR(22),
+        consorcio VARCHAR(50), 
+        numero VARCHAR(10),
+        piso VARCHAR(10),
+        departamento VARCHAR(10)   
     );
 
-    BEGIN TRY
-        -- insert en sql dinamico pq sino no hay forma de hacer la ruta dinamica
-        DECLARE @sqlBulk VARCHAR(MAX);
-        SET @sqlBulk = '
-            BULK INSERT #TempProveedoresGasto
-            FROM ''' + @rutaArch + '''
+
+    IF CHARINDEX('''', @RutaArchivo) > 0 OR
+        CHARINDEX('--', @RutaArchivo) > 0 OR
+        CHARINDEX('/*', @RutaArchivo) > 0 OR 
+        CHARINDEX('*/', @RutaArchivo) > 0 OR
+        CHARINDEX(';', @RutaArchivo) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END
+    ELSE
+    BEGIN
+        DECLARE @SQL NVARCHAR(MAX);
+    
+        SET @SQL = N'
+            BULK INSERT #CargaDatosTemp
+            FROM ''' + @RutaArchivo + '''
             WITH (
-                FIELDTERMINATOR = '';'',
+                FIELDTERMINATOR = ''|'',
                 ROWTERMINATOR = ''\n'',
-                FIRSTROW = 2, -- Asumo que tu CSV tiene encabezados
-                CODEPAGE = ''ACP''
+                FIRSTROW = 2
             );';
-        EXEC(@sqlBulk);
 
-        -- conexion de tablas para ver donde meter los datos
+        EXEC sp_executesql @SQL;
+    END
 
-        UPDATE GastoOrdinario
-        SET GastoOrdinario.nomEmpresaoPersona = T.nomEmpresaCSV, GastoOrdinario.detalle = T.detalleCSV
-        FROM 
-			GastoOrdinario
-        -- de GastoOrdinario a Expensa
-        JOIN
-            Expensa ON GastoOrdinario.idExpensa = Expensa.id
-        -- de Expensa a Consorcio
-        JOIN
-            Consorcio ON Expensa.consorcioId = Consorcio.id
-        -- de Consorcio y GastoOrdinario a la tabla temporal
-        JOIN
-            #TempProveedoresGasto AS T 
-            ON GastoOrdinario.tipoGasto = T.tipoGastoCSV  
-            AND Consorcio.nombre = T.nombreConsorcioCSV
-			--con esto me fijo q coincida el tipo de gasto con el nombre del consorcio para q identifique la expensa
-    END TRY
-	--cositas de seguridad por si se rompe algo
-    BEGIN CATCH
-        PRINT 'Error durante la actualización de gastos:' 
-        PRINT ERROR_MESSAGE();
-    END CATCH
-    DROP TABLE #TempProveedoresGasto;
-    SET NOCOUNT OFF;
-END;
+    CREATE TABLE #ConsorcioTemp (
+        CVU_CBUPersona CHAR(22),
+        ID_Consorcio INT,
+        numero VARCHAR(10),
+        piso VARCHAR(10),
+        departamento VARCHAR(10)
+    );
+
+    INSERT INTO #ConsorcioTemp (CVU_CBUPersona, ID_Consorcio, numero, piso, departamento)
+    SELECT c.CVU_CBUPersona,
+        c.id,
+        cd.numero,
+        cd.piso,
+        cd.departamento
+    FROM #CargaDatosTemp AS cd
+    JOIN Consorcio.Consorcio AS c ON cd.consorcio = c.nombre;
+
+    MERGE INTO Consorcio.UnidadFuncional AS target
+    USING #ConsorcioTemp AS source
+    ON target.CVU_CBUPersona = source.CVU_CBUPersona
+    WHEN MATCHED AND(
+        target.numero <> source.numero AND
+        target.piso <> source.piso AND
+        target.departamento <> source.departamento AND
+        target.consorcioId <> source.ID_Consorcio
+    ) THEN
+    UPDATE SET
+        target.numero = source.numero,
+        target.piso = source.piso,
+        target.departamento = source.departamento,
+        target.consorcioId = source.ID_Consorcio
+    WHEN NOT MATCHED BY TARGET THEN
+        INSERT (CVU_CBUPersona, numero, piso, departamento, consorcioId)
+        VALUES (source.CVU_CBUPersona,  source.numero, source.piso, source.departamento, source.ID_Consorcio);
+END
 GO
