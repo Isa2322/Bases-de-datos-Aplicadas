@@ -59,7 +59,89 @@ GO
 
 -- servicios.servicios.json
 
--- Funci�n de Limpieza: Crea un nuevo lote con GO
+use [Com5600G11];
+go 
+
+CREATE OR ALTER PROCEDURE Pago.ImportacionPago
+	AS
+	BEGIN
+
+	SET NOCOUNT ON;
+
+	CREATE TABLE #PagosConsorcio (idPago int , fecha VARCHAR(10),CVU_CBU VARCHAR(22),valor varchar (12))
+
+	BULK INSERT #PagosConsorcio
+	FROM 'C:\consorcios\pagos_consorcios.csv'
+	WITH(
+		FIELDTERMINATOR = ',', -- Especifica el delimitador de campo (coma en un archivo CSV)
+		ROWTERMINATOR = '\n', -- Especifica el terminador de fila (salto de linea en un archivo CSV)
+		CODEPAGE = 'ACP',-- Especifica la pagina de codigos del archivo
+		FIRSTROW=2
+		)
+		
+
+DELETE FROM #PagosConsorcio-- Elimino las filas nulas en caso de que se generen
+WHERE 
+    idPago IS NULL
+    AND fecha IS NULL
+    AND CVU_CBU IS NULL
+	AND valor IS NULL;
+
+
+--Preparo los valores para cargar la tabla Pago.Pago 
+UPDATE #PagosConsorcio
+	SET valor = REPLACE(Valor, '$', '')
+
+
+UPDATE #PagosConsorcio
+	SET valor = CAST(valor AS DECIMAL(18,2))
+
+
+UPDATE #PagosConsorcio
+	SET fecha = CONVERT(DATE, fecha, 103)
+
+ALTER TABLE #PagosConsorcio
+	ADD idFormaPago INT
+
+--inserto un valor provisorio para importar a la tabla Pago.FormaDePago
+UPDATE P
+SET P.idFormaPago = (
+    SELECT TOP 1 idFormaPago
+    FROM Pago.FormaDePago
+)
+FROM #PagosConsorcio AS P;
+
+   INSERT INTO Pago.Pago(fecha ,importe , cbuCuentaOrigen, idFormaPago)
+   select fecha, valor,CVU_CBU,idFormaPago
+   from #PagosConsorcio
+   where idPago IS NOT NULL
+--select *from pago.pago
+--SELECT* FROM #PagosConsorcio
+DROP TABLE #PagosConsorcio	
+END
+GO
+
+CREATE OR ALTER	PROCEDURE Pago.generadorFormasDePago 
+AS
+BEGIN
+	IF NOT EXISTS (
+	SELECT descripcion
+	FROM Pago.FormaDePago a
+	WHERE a.descripcion='Transferencia' OR a.descripcion='Debito automatico'
+					)
+					BEGIN
+						INSERT INTO Pago.FormaDePago(descripcion)
+							VALUES('Transferencia'),
+							('Debito automatico')
+					END
+
+END
+
+EXEC Pago.generadorFormasDePago
+EXEC Pago.ImportacionPago
+
+select * from Pago.FormaDePago
+-- Funcion de Limpieza: Crea un nuevo lote con GO
 IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Negocio.LimpiarNumero;
 GO
 
@@ -75,7 +157,7 @@ BEGIN
     -- 2. Reemplazar la coma 
     SET @ImporteLimpio = REPLACE(@ImporteLimpio, ',', '.');
     
-    -- Manejo de valores vac�os o NULL antes de la conversi�n
+    -- Manejo de valores vacios o NULL antes de la conversion
     IF ISNUMERIC(@ImporteLimpio) = 1
     BEGIN
         RETURN CONVERT(DECIMAL(18, 2), @ImporteLimpio);
@@ -144,9 +226,7 @@ BEGIN
 
 
  
-    -- 2- almacenar a Negocio.GastoOrdinario (B�squeda de FK y Mapeo)
-/* 
-    -- 2- almacenar a Negocio.GastoOrdinario (B�squeda de FK y Mapeo)
+    -- 2- almacenar a Negocio.GastoOrdinario (Busqueda de FK y Mapeo)
     
     INSERT INTO Negocio.GastoOrdinario (
         idExpensa, nombreEmpresaoPersona, nroFactura, fechaEmision, importeTotal, detalle, tipoServicio
@@ -179,7 +259,7 @@ BEGIN
         -- nroFactura
         CAST(ABS(CHECKSUM(NEWID() + CAST(@@SPID AS VARCHAR(10)))) AS VARCHAR(50)) AS nroFactura,
         
-        -- fechaEmision (asumo que el a�o es actual)
+        -- fechaEmision (asumo que el ano es actual)
         DATEFROMPARTS(YEAR(GETDATE()), 
                       CASE LTRIM(RTRIM(LOWER(S.Mes)))
                           WHEN 'enero' THEN 1 WHEN 'febrero' THEN 2 WHEN 'marzo' THEN 3
@@ -213,7 +293,7 @@ BEGIN
              CASE S.TipoGastoBruto WHEN 'SERVICIOS PUBLICOS-Agua' THEN 'AYSA' 
                                    WHEN 'SERVICIOS PUBLICOS-Luz' THEN 'EDENOR' 
                                    ELSE S.TipoGastoBruto END)
-        -- Se asume que el idExpensa es la clave del per�odo
+        -- Se asume que el idExpensa es la clave del periodo
         AND GO.idExpensa = (
             SELECT TOP 1 E.id FROM Negocio.Expensa AS E
             INNER JOIN Consorcio.Consorcio AS CM ON E.idConsorcio = CM.idConsorcio

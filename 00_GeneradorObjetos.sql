@@ -21,7 +21,7 @@ novedades con la misma estructura, pero datos nuevos para agregar a cada maestro
 - Considere este comportamiento al generar el codigo. Debe admitir la importacion de
 novedades periodicamente sin eliminar los datos ya cargados y sin generar
 duplicados.
-- Cada maestro debe importarse con un SP distinto. No se aceptaran scripts que
+-Cada maestro debe importarse con un SP distinto. No se aceptaran scripts que
 realicen tareas por fuera de un SP. Se proveeran archivos para importar en MIEL.
 - La estructura/esquema de las tablas a generar sera decision suya. Puede que deba
 realizar procesos de transformacion sobre los maestros recibidos para adaptarlos a la
@@ -36,16 +36,16 @@ preparar los datos de prueba necesarios para cumplimentar los requisitos plantea
 - El codigo fuente no debe incluir referencias hardcodeadas a nombres o ubicaciones
 de archivo. Esto debe permitirse ser provisto por parametro en la invocacion. En el
 codigo de ejemplo se vera donde el grupo decidio ubicar los archivos, pero si cambia
-el entorno de ejecucion debería adaptarse sin modificar el fuente (si obviamente el
+el entorno de ejecucion deberia adaptarse sin modificar el fuente (si obviamente el
 script de testing). La configuracion escogida debe aparecer en comentarios del
-módulo.
-- El uso de SQL dinamico no esta exigido en forma explicita… pero puede que
+modulo.
+- El uso de SQL dinamico no esta exigido en forma explicita pero puede que
 encuentre que es la unica forma de resolver algunos puntos. No abuse del SQL
 dinamico, debera justificar su uso siempre.
 - Respecto a los informes XML: no se espera que produzcan un archivo nuevo en el
 filesystem, basta con que el resultado de la consulta sea XML.
 - Se espera que apliquen en todo el trabajo las pautas consignadas en la Unidad 3
-respecto a optimización de codigo y de tipos de datos.
+respecto a optimizacion de codigo y de tipos de datos.
 */
 
 IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'Com5600G11')
@@ -60,11 +60,11 @@ go
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Operaciones')
 BEGIN
     EXEC('CREATE SCHEMA Operaciones');
-    PRINT N'schema "Operaciones" no existía: se creó correctamente.';
+    PRINT N'schema "Operaciones" no existia: se creo correctamente.';
 END
 ELSE
 BEGIN
-    PRINT N'schema "Operaciones" ya existe: no se creó nada.';
+    PRINT N'schema "Operaciones" ya existe: no se creo nada.';
 END
 GO
 
@@ -77,33 +77,33 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Negocio')
 BEGIN
     EXEC('CREATE SCHEMA Negocio');
-    PRINT N'schema "Negocio" no existía: se creó correctamente.';
+    PRINT N'schema "Negocio" no existia: se creo correctamente.';
 END
 ELSE
 BEGIN
-    PRINT N'schema "Negocio" ya existe: no se creó nada.';
+    PRINT N'schema "Negocio" ya existe: no se creo nada.';
 END
 GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Consorcio')
 BEGIN
     EXEC('CREATE SCHEMA Consorcio');
-    PRINT N'schema "Consorcio" no existía: se creó correctamente.';
+    PRINT N'schema "Consorcio" no existia: se creo correctamente.';
 END
 ELSE
 BEGIN
-    PRINT N'schema "Consorcio" ya existe: no se creó nada.';
+    PRINT N'schema "Consorcio" ya existe: no se creo nada.';
 END
 GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Pago')
 BEGIN
     EXEC('CREATE SCHEMA Pago');
-    PRINT N'schema "Pago" no existía: se creó correctamente.';
+    PRINT N'schema "Pago" no existia: se creo correctamente.';
 END
 ELSE
 BEGIN
-    PRINT N'schema "Pago" ya existe: no se creó nada.';
+    PRINT N'schema "Pago" ya existe: no se creo nada.';
 END
 GO
 
@@ -275,6 +275,32 @@ BEGIN
         CONSTRAINT FK_Baulera_UnidadFuncional FOREIGN KEY (unidadFuncionalId) 
             REFERENCES Consorcio.UnidadFuncional(id)
     );
+END
+GO
+
+IF OBJECT_ID(N'Consorcio.CuentaBancaria','U') IS NULL
+BEGIN
+	CREATE TABLE Consorcio.CuentaBancaria(
+		CVU_CBU CHAR(22) PRIMARY KEY,
+		nombreTitular CHAR(22),
+		saldo DECIMAL(10,2)
+		)
+END
+GO
+
+IF OBJECT_ID(N'Consorcio.Consorcio','U') IS NULL
+BEGIN
+	CREATE TABLE Consorcio.Consorcio(
+		id INT IDENTITY(1,1),
+		nombre VARCHAR(100) NOT NULL,
+		CVU_CBU CHAR(22),
+		direccion VARCHAR(200) NOT NULL,
+		metrosCuadradosTotal DECIMAL(10,2),
+		CONSTRAINT PK_id PRIMARY KEY(id),
+		CONSTRAINT FK_CVU_CBU FOREIGN KEY (CVU_CBU) 
+		REFERENCES Consorcio.CuentaBancaria(CVU_CBU)
+		)
+
 END
 GO
 
