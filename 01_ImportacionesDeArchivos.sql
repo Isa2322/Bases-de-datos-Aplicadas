@@ -59,6 +59,8 @@ GO
 
 -- servicios.servicios.json
 
+-- Funci�n de Limpieza: Crea un nuevo lote con GO
+IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Operaciones.LimpiarNumero;
 use [Com5600G11];
 go 
 
@@ -145,7 +147,7 @@ select * from Pago.FormaDePago
 IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Negocio.LimpiarNumero;
 GO
 
-CREATE FUNCTION Negocio.LimpiarNumero (@ImporteVarchar VARCHAR(50))
+CREATE FUNCTION Operaciones.LimpiarNumero (@ImporteVarchar VARCHAR(50))
 RETURNS DECIMAL(18, 2)
 AS
 BEGIN
@@ -167,13 +169,17 @@ BEGIN
 END;
 GO
 
-CREATE or ALTER PROCEDURE Negocio.sp_ImportarGastosMensuales
---( @ruta VARCHAR(500) )
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarGastosMensuales
+( 
+    @ruta VARCHAR(500) 
+)
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- tabla temporal
+    DECLARE @sql NVARCHAR(MAX);
+
+    -- Tabla temporal
     IF OBJECT_ID('tempdb..#TemporalDatosServicio') IS NOT NULL
     BEGIN
         DROP TABLE #TemporalDatosServicio;
@@ -186,78 +192,68 @@ BEGIN
         Importe DECIMAL(18, 2)
     );
 
-    
-
-    -- 1- importar el archivo json
+    -- La variable @ruta debe concatenarse para formar la cadena literal del BULK
+    SET @sql = N'
     INSERT INTO #TemporalDatosServicio (NombreConsorcio, Mes, TipoGastoBruto, Importe)
     SELECT
         J.NombreConsorcio,
         J.Mes,
         T.TipoGastoBruto,
         Negocio.LimpiarNumero(T.ImporteBruto) 
-        FROM OPENROWSET (BULK 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Servicios.Servicios.json', SINGLE_CLOB) as jr
-        CROSS APPLY OPENJSON(BulkColumn)
-        WITH (
-            NombreConsorcio VARCHAR(100) '$."Nombre del consorcio"',
-            Mes             VARCHAR(20)  '$.Mes',
-
-            -- aca se encuentra el importe d cada servicio
-            BANCARIOS       VARCHAR(50)  '$.BANCARIOS',
-            LIMPIEZA        VARCHAR(50)  '$.LIMPIEZA',
-            ADMINISTRACION  VARCHAR(50)  '$.ADMINISTRACION',
-            SEGUROS         VARCHAR(50)  '$.SEGUROS',
-            GASTOS_GRALES   VARCHAR(50)  '$."GASTOS GENERALES"',
-            AGUA            VARCHAR(50)  '$."SERVICIOS PUBLICOS-Agua"',
-            LUZ             VARCHAR(50)  '$."SERVICIOS PUBLICOS-Luz"'
-        ) AS J
+    FROM OPENROWSET (BULK ''' + @ruta + ''', SINGLE_CLOB) AS jr
+    CROSS APPLY OPENJSON(BulkColumn)
+    WITH (
+        NombreConsorcio VARCHAR(100) ''$."Nombre del consorcio"'',
+        Mes             VARCHAR(20)  ''$.Mes'',
+        BANCARIOS       VARCHAR(50)  ''$.BANCARIOS'',
+        LIMPIEZA        VARCHAR(50)  ''$.LIMPIEZA'',
+        ADMINISTRACION  VARCHAR(50)  ''$.ADMINISTRACION'',
+        SEGUROS         VARCHAR(50)  ''$.SEGUROS'',
+        GASTOS_GRALES   VARCHAR(50)  ''$."GASTOS GENERALES"'',
+        AGUA            VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Agua"'',
+        LUZ             VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Luz"''
+    ) AS J
     CROSS APPLY (VALUES 
-        ('BANCARIOS', J.BANCARIOS),
-        ('LIMPIEZA', J.LIMPIEZA),
-        ('ADMINISTRACION', J.ADMINISTRACION),
-        ('SEGUROS', J.SEGUROS),
-        ('GASTOS GENERALES', J.GASTOS_GRALES),
-        ('SERVICIOS PUBLICOS-Agua', J.AGUA), 
-        ('SERVICIOS PUBLICOS-Luz', J.LUZ)    
+        (''BANCARIOS'', J.BANCARIOS),
+        (''LIMPIEZA'', J.LIMPIEZA),
+        (''ADMINISTRACION'', J.ADMINISTRACION),
+        (''SEGUROS'', J.SEGUROS),
+        (''GASTOS GENERALES'', J.GASTOS_GRALES),
+        (''SERVICIOS PUBLICOS-Agua'', J.AGUA), 
+        (''SERVICIOS PUBLICOS-Luz'', J.LUZ)     
     ) AS T (TipoGastoBruto, ImporteBruto)
     WHERE Negocio.LimpiarNumero(T.ImporteBruto) IS NOT NULL 
-          AND Negocio.LimpiarNumero(T.ImporteBruto) > 0;
+        AND Negocio.LimpiarNumero(T.ImporteBruto) > 0;
 
-    select * from #TemporalDatosServicio;
+    SELECT * FROM #TemporalDatosServicio;';
 
+    EXEC sp_executesql @sql
+    
+    -- almacenar a Negocio.GastoOrdinario
 
  
     -- 2- almacenar a Negocio.GastoOrdinario (Busqueda de FK y Mapeo)
     
     INSERT INTO Negocio.GastoOrdinario (
-        idExpensa, nombreEmpresaoPersona, nroFactura, fechaEmision, importeTotal, detalle, tipoServicio
+        idExpensa, 
+        nombreEmpresaoPersona, 
+        nroFactura, 
+        fechaEmision, 
+        importeTotal, 
+        detalle, 
+        tipoServicio
     )
     SELECT
-        -- idExpensa
-        (
-            SELECT TOP 1 E.id
-            FROM Negocio.Expensa AS E
-            INNER JOIN Consorcio.Consorcio AS CM ON E.idConsorcio = CM.idConsorcio
-            WHERE CM.NombreConsorcio = S.NombreConsorcio 
-              AND E.PeriodoMes = LTRIM(RTRIM(S.Mes)) -- elimina espacios en blanco 
-        ) AS idExpensa, 
-        
-        /*
-        -- idConsorcio
-        (
-            SELECT TOP 1 CM.idConsorcio
-            FROM Consorcio.Consorcio AS CM
-            WHERE CM.NombreConsorcio = S.NombreConsorcio
-        ) AS idConsorcio, */
-        
-        -- nombreEmpresaoPersona
-        CASE S.TipoGastoBruto
-            WHEN 'SERVICIOS PUBLICOS-Agua' THEN 'AYSA' 
-            WHEN 'SERVICIOS PUBLICOS-Luz'  THEN 'EDENOR' 
-            ELSE S.TipoGastoBruto 
-        END AS nombreEmpresaoPersona,
+        -- idExpensa: Búsqueda de FK
+        E.id AS idExpensa, 
 
-        -- nroFactura
+        -- nombreEmpresaoPersona: Lógica de proveedor
+        S.TipoGastoBruto AS nombreEmpresaoPersona,
+
+        -- nroFactura: Generación de factura (aleatoria/checksum)
         CAST(ABS(CHECKSUM(NEWID() + CAST(@@SPID AS VARCHAR(10)))) AS VARCHAR(50)) AS nroFactura,
+    
+        -- fechaEmision: Calculo de fecha
         
         -- fechaEmision (asumo que el ano es actual)
         DATEFROMPARTS(YEAR(GETDATE()), 
@@ -274,21 +270,30 @@ BEGIN
         S.Importe AS importeTotal,
 
         -- detalle
-        'Gasto mensual - ' + S.TipoGastoBruto AS detalle,
-        
-        -- tipoServicio (unificado el servicio publico)
-        CASE S.TipoGastoBruto
-            WHEN 'SERVICIOS PUBLICOS-Agua' THEN 'SERVICIOS PUBLICOS'
-            WHEN 'SERVICIOS PUBLICOS-Luz'  THEN 'SERVICIOS PUBLICOS'
-            ELSE S.TipoGastoBruto 
-        END AS tipoServicio
+        null AS detalle,
+    
+        -- tipoServicio
+        S.TipoGastoBruto AS tipoServicio
 
     FROM #TemporalDatosServicio AS S
-    WHERE NOT EXISTS (
 
-       -- busca duplicados
+    -- unir la tabla temporal con la Expensa para obtener el id
+    CROSS APPLY (
+        SELECT TOP 1 E.id, CM.nombre 
+        FROM Negocio.Expensa AS E
+        INNER JOIN Consorcio.Consorcio AS CM ON E.consorcio_id = CM.idConsorcio 
+        WHERE CM.nombre = S.NombreConsorcio and
+        E.fechaPeriodo = E.periodo = LTRIM(RTRIM(S.Mes))
+    ) AS E (id, NombreConsorcio_FK)
+
+    -- evita duplicados si los encuentra ya en la tabla
+    WHERE NOT EXISTS (
         SELECT 1 
         FROM Negocio.GastoOrdinario AS GO
+        -- Condición de unicidad: Debe coincidir el idExpensa
+        WHERE GO.idExpensa = E.id
+        -- Y debe coincidir el tipo de servicio para el mismo período
+        AND GO.tipoServicio = S.TipoGastoBruto
         WHERE GO.nombreEmpresaoPersona = (
              CASE S.TipoGastoBruto WHEN 'SERVICIOS PUBLICOS-Agua' THEN 'AYSA' 
                                    WHEN 'SERVICIOS PUBLICOS-Luz' THEN 'EDENOR' 
@@ -301,23 +306,21 @@ BEGIN
         )
 
     )
-    -- Se inserta solo si ambas FK (idExpensa) se encuentran
-    AND (SELECT TOP 1 E.id FROM Negocio.Expensa AS E 
-         INNER JOIN Consorcio.ConsorcioAS CM ON E.idConsorcio = CM.idConsorcio
-         WHERE CM.NombreConsorcio = S.NombreConsorcio AND E.PeriodoMes = LTRIM(RTRIM(S.Mes))) IS NOT NULL;
+    -- Se asegura de que la FK (E.id) se haya encontrado
+    AND E.id IS NOT NULL;    
     
-
-
-    -- 3- eliminar la tabla temporal
+    -- eliminar la tabla temporal
     DROP TABLE #TemporalDatosServicio;
-
-    */ 
 
 END
 GO
 
-EXEC Negocio.sp_ImportarGastosMensuales;
-go
+-- Ejemplo de ejecución:
+ EXEC Operaciones.sp_ImportarGastosMensuales @ruta = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Servicios.Servicios.json';
+ go
+ select * from [Negocio].[GastoOrdinario];
+
+
 
 -- IMPORTACION DE PERSONAS
 
