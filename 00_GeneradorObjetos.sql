@@ -75,7 +75,6 @@ BEGIN
 END
 GO
 
--- Nos fijamos que no exista antes de crearlo
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Negocio')
 BEGIN
     EXEC('CREATE SCHEMA Negocio');
