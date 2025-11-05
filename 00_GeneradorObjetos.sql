@@ -48,9 +48,6 @@ filesystem, basta con que el resultado de la consulta sea XML.
 respecto a optimización de codigo y de tipos de datos.
 */
 
-use master;
-drop database [Com5600G11];
-
 IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'Com5600G11')
 BEGIN
     CREATE DATABASE Com5600G11;
@@ -299,4 +296,3 @@ BEGIN
 END
 GO
 
--- este es el fin
