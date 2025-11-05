@@ -16,22 +16,9 @@ GO
 
 -- FORMAS DE PAGO
 
-IF OBJECT_ID('SP_CrearYcargar_FormasDePago_Semilla', 'P') IS NOT NULL
-    DROP PROCEDURE SP_CrearYcargar_FormasDePago_Semilla
-GO
-
-CREATE PROCEDURE SP_CrearYcargar_FormasDePago_Semilla
-AS
-BEGIN
-    
-    PRINT N'Insertando/Verificando datos semilla en Pago.FormaDePago...';
-
-    -- Transferencia Bancaria (m�s com�n para el CVU/CBU)
-    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Transferencia Bancaria')
-    BEGIN
-        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
-        VALUES ('Transferencia Bancaria', 'Comprobante');
-    END
+CREATE OR ALTER PROCEDURE Pago.ImportacionPago
+	AS
+	BEGIN
 
     -- Pago en Efectivo (si aplica en la administraci�n)
     IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Efectivo en Oficina')
@@ -52,18 +39,9 @@ BEGIN
 END
 GO
 
-EXEC SP_CrearYcargar_FormasDePago_Semilla;
-GO
 
 -- servicios.servicios.json
 
-use [Com5600G11];
-go 
-
-
-EXEC Pago.ImportacionPago
-
-select * from Pago.FormaDePago
 -- Funcion de Limpieza: Crea un nuevo lote con GO
 IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Negocio.LimpiarNumero;
 GO
@@ -275,6 +253,8 @@ END
 
     PRINT 'Iniciando importaci�n de: ' + @RutaArchivo;
 
+
+---------------------------- ESTO NO VA ------------------------
 -- Se eliminan las tablas si existen
     DROP TABLE IF EXISTS Persona.CuentaBancaria;
     DROP TABLE IF EXISTS Persona.Persona;
