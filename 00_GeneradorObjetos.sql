@@ -48,11 +48,35 @@ filesystem, basta con que el resultado de la consulta sea XML.
 respecto a optimizacion de codigo y de tipos de datos.
 */
 
+use master;
+
+/*
+IF EXISTS (SELECT name FROM sys.databases WHERE name = 'Com5600G11')
+BEGIN
+    EXEC msdb.dbo.sp_delete_database_backuphistory @database_name = N'Com5600G11'
+
+    ALTER DATABASE Com5600G11 SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+
+    DROP DATABASE [Com5600G11]
+    
+    PRINT N'Base de datos Com5600G11 eliminada correctamente.'
+END
+GO
+*/ 
+
 IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'Com5600G11')
 BEGIN
     CREATE DATABASE Com5600G11;
 END;
 GO
+
+/*
+-- Regresar a modo multi-usuario
+ALTER DATABASE Com5600G11
+SET MULTI_USER 
+WITH ROLLBACK IMMEDIATE;
+GO
+*/ 
 
 use [Com5600G11];
 go 
@@ -68,11 +92,13 @@ BEGIN
 END
 GO
 
+/*
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Persona')
 BEGIN
     EXEC('CREATE SCHEMA Persona');
 END
 GO
+*/
 
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Negocio')
 BEGIN
@@ -156,7 +182,7 @@ CREATE TABLE Negocio.Expensa(
     egresos DECIMAL(10,2),
     saldoCierre DECIMAL(10,2),
     fechaPeriodo DATE NULL,
-    FOREIGN KEY (consorcio_id) REFERENCES Consorcio.ConsorcioMaster(idConsorcio)
+    FOREIGN KEY (consorcio_id) REFERENCES Consorcio.Consorcio(id)
 );
 END
 GO
@@ -166,7 +192,7 @@ BEGIN
     CREATE TABLE Consorcio.UnidadFuncional
     (
         id INT IDENTITY(1,1) PRIMARY KEY,
-        CVU_CBUPersona CHAR(22) NOT NULL,
+        CVU_CBU CHAR(22) NOT NULL,
         consorcioId INT NOT NULL,
         departamento VARCHAR(10) NULL,
         piso VARCHAR(10) NULL,
@@ -175,27 +201,37 @@ BEGIN
         porcentajeExpensas DECIMAL(5, 2) NOT NULL,
         tipo VARCHAR(50) NULL,
         
-        CONSTRAINT FK_UF_CuentaBancaria FOREIGN KEY (CVU_CBUPersona) 
-            REFERENCES Persona.CuentaBancaria(CVU_CBU), 
+        CONSTRAINT FK_UF_CuentaBancaria FOREIGN KEY (CVU_CBU) 
+            REFERENCES Consorcio.CuentaBancaria(CVU_CBU), 
             
         CONSTRAINT FK_UF_Consorcio FOREIGN KEY (consorcioId) 
-            REFERENCES Consorcio.ConsorcioMaster(idConsorcio)
+            REFERENCES Consorcio.Consorcio(id)
     );
 END
 GO
 
 IF OBJECT_ID(N'Negocio.GastoOrdinario', 'U') IS NULL
 CREATE TABLE Negocio.GastoOrdinario (
-    idGasto INT PRIMARY KEY IDENTITY,
-    idExpensa INT NOT NULL, 
-    nombreEmpresaoPersona VARCHAR(200) NULL,
-    nroFactura VARCHAR(50) NULL,
-    fechaEmision DATE NULL,
-    importeTotal DECIMAL(18, 2) NOT NULL,
-    detalle VARCHAR(500) NULL,
-    tipoServicio VARCHAR(50) NULL,
-    CONSTRAINT FK_GastoOrd_Expensa FOREIGN KEY (idExpensa) 
-        REFERENCES Negocio.Expensa(id) 
+    idGasto INT PRIMARY KEY IDENTITY,
+    idExpensa INT NOT NULL, 
+    nombreEmpresaoPersona VARCHAR(200) NULL,
+    nroFactura CHAR(10) NOT NULL, -- CHAR(10) y NOT NULL
+    fechaEmision DATE NULL,
+    importeTotal DECIMAL(18, 2) NOT NULL,
+    detalle VARCHAR(500) NULL,
+    tipoServicio VARCHAR(50) NULL,
+
+    -- RESTRICCIONES DE UNICIDAD Y FORMATO
+    CONSTRAINT UQ_NroFactura UNIQUE (nroFactura),
+    CONSTRAINT CHK_NroFactura_Numerico CHECK (
+        ISNUMERIC(nroFactura) = 1 
+        AND LEN(nroFactura) = 10 
+        AND CAST(nroFactura AS BIGINT) > 0
+    ),
+    
+    -- Llave Foránea a Negocio.Expensa
+    CONSTRAINT FK_GastoOrd_Expensa FOREIGN KEY (idExpensa) 
+        REFERENCES Negocio.Expensa(id) 
 )
 GO
 
