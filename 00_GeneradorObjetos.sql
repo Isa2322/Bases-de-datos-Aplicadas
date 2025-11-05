@@ -111,69 +111,53 @@ BEGIN
 END
 GO
 
-DROP TABLE IF EXISTS Pago.FormaDePago
+
+
+-- Nos fijamos que no exista antes de crearlo
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Negocio')
+BEGIN
+    EXEC('CREATE SCHEMA Negocio');
+    PRINT N'schema "Negocio" no existía: se creó correctamente.';
+END
+ELSE
+BEGIN
+    PRINT N'schema "Negocio" ya existe: no se creó nada.';
+END
 GO
 
-CREATE TABLE Pago.FormaDePago (
-    idFormaPago INT IDENTITY(1,1) NOT NULL,
-    
-    descripcion VARCHAR(50) NOT NULL,
-    
-    confirmacion VARCHAR(20) NULL, 
-    
-    CONSTRAINT PK_FormaDePago PRIMARY KEY CLUSTERED (idFormaPago)
-);
-GO
-
-DROP TABLE IF EXISTS Pago.Pago
-GO
-CREATE TABLE Pago.Pago (
-    id INT IDENTITY(1,1) NOT NULL,
-    
-    idFormaPago INT NOT NULL, 
-    
-    cbuCuentaOrigen VARCHAR(50) NOT NULL, 
-    
-    fecha DATETIME2(0) NOT NULL DEFAULT GETDATE(),
-    
-    importe DECIMAL(18, 2) NOT NULL, 
-    
-    CONSTRAINT PK_Pago PRIMARY KEY CLUSTERED (id),
-    
-    CONSTRAINT FK_Pago_FormaDePago FOREIGN KEY (idFormaPago)
-        REFERENCES Pago.FormaDePago (idFormaPago)
-);
-GO
-
-DROP TABLE IF EXISTS Pago.PagoAplicado
-GO
-CREATE TABLE Pago.PagoAplicado (
-    idPago INT NOT NULL, 
-    
-    idDetalleExpensa INT NOT NULL, 
-    
-    importeAplicado DECIMAL(18, 2) NOT NULL, 
-    
-    CONSTRAINT PK_PagoAplicado PRIMARY KEY CLUSTERED (idPago, idDetalleExpensa),
-    
-    CONSTRAINT FK_PagoAplicado_Pago FOREIGN KEY (idPago)
-    REFERENCES Pago.Pago (id),
-    --CONSTRAINT FK_PagoAplicado_DetalleExpensa FOREIGN KEY (idDetalleExpensa)
-    --REFERENCES Consorcio.DetalleExpensa (idDetalleExpensa)
-);
-GO
 
 
 -- Nos fijamos que no exista antes de crear la tabla Expensa para la FK
-IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'Negocio.Expensa') AND type = 'U')
-BEGIN
-    CREATE TABLE Negocio.Expensa (
-        id INT PRIMARY KEY IDENTITY,
-        idConsorcio INT NULL,
-        periodo NVARCHAR(50) NULL
-    )
-END
-GO
+DROP TABLE IF EXISTS Negocio.Expensa;
+CREATE TABLE Negocio.Expensa(
+    id INT PRIMARY KEY,
+    consorcio_id INT,
+    saldoAnterior DECIMAL(10,2),
+    ingresosEnTermino DECIMAL(10,2),
+    ingresosAdeudados DECIMAL(10,2),
+    ingresosAdelantados DECIMAL(10,2),
+    egresos DECIMAL(10,2),
+    saldoCierre DECIMAL(10,2),
+    FOREIGN KEY (consorcio_id) REFERENCES Negocio.Consorcio(id)
+);
+
+
+DROP TABLE IF EXISTS Negocio.DetalleExpensa;
+CREATE TABLE Negocio.DetalleExpensa(
+    id INT PRIMARY KEY,
+    expensaId INT,
+    idUnidadFuncional INT,
+    prorrateoOrdinario DECIMAL(10,2),
+    prorrateoExtraordinario DECIMAL(10,2),
+    interesMora DECIMAL(10,2),
+    totalaPagar DECIMAL(10,2),
+    saldoAnteriorAbonado DECIMAL(10,2),
+    pagosRecibidos DECIMAL(10,2),
+    primerVencimiento DATE,
+    segundoVencimiento DATE,
+    FOREIGN KEY (expensaId) REFERENCES Negocio.Expensa(id),
+    FOREIGN KEY (idUnidadFuncional) REFERENCES Consorcio.UnidadFuncional(id)
+);
 
 
 IF OBJECT_ID(N'Negocio.GastoOrdinario', 'U') IS NULL
@@ -194,6 +178,7 @@ ELSE
 GO
 
 IF OBJECT_ID(N'Negocio.GastoExtraordinario', 'U') IS NULL
+BEGIN
 CREATE TABLE Negocio.GastoExtraordinario (
     idGasto INT PRIMARY KEY IDENTITY,
     idExpensa INT NOT NULL, 
@@ -208,10 +193,13 @@ CREATE TABLE Negocio.GastoExtraordinario (
     CONSTRAINT FK_GastoExt_Expensa FOREIGN KEY (idExpensa) 
         REFERENCES Negocio.Expensa(id)
 )
+END
 ELSE
     PRINT N'Ya existe la tabla.'
 GO
 
+
+--UNIDAD FUNCIONAL
 IF OBJECT_ID(N'Consorcio.UnidadFuncional', 'U') IS NULL
 BEGIN
     CREATE TABLE Consorcio.UnidadFuncional
@@ -237,8 +225,7 @@ ELSE
     PRINT N'Ya existe la tabla Consorcio.UnidadFuncional.';
 GO
 
----
-
+---COCHERA
 IF OBJECT_ID(N'Consorcio.Cochera', 'U') IS NULL
 BEGIN
     CREATE TABLE Consorcio.Cochera
@@ -256,8 +243,7 @@ ELSE
     PRINT N'Ya existe la tabla Consorcio.Cochera.';
 GO
 
----
-
+--BAULERA
 IF OBJECT_ID(N'Consorcio.Baulera', 'U') IS NULL
 BEGIN
     CREATE TABLE Consorcio.Baulera
@@ -273,4 +259,63 @@ BEGIN
 END
 ELSE
     PRINT N'Ya existe la tabla Consorcio.Baulera.';
+GO
+
+IF OBJECT_ID(N'Pago.FormaDePago', 'U') IS NULL
+BEGIN
+    CREATE TABLE Pago.FormaDePago (
+        idFormaPago INT IDENTITY(1,1) NOT NULL,
+        
+        descripcion VARCHAR(50) NOT NULL,
+        
+        confirmacion VARCHAR(20) NULL, 
+        
+        CONSTRAINT PK_FormaDePago PRIMARY KEY CLUSTERED (idFormaPago)
+    );
+END
+GO
+
+
+IF OBJECT_ID(N'Pago.Pago', 'U') IS NULL
+BEGIN
+    CREATE TABLE Pago.Pago (
+        id INT IDENTITY(1,1) NOT NULL,
+        
+        idFormaPago INT NOT NULL, 
+        
+        cbuCuentaOrigen VARCHAR(50) NOT NULL, 
+        
+        fecha DATETIME2(0) NOT NULL DEFAULT GETDATE(),
+        
+        importe DECIMAL(18, 2) NOT NULL, 
+        
+        CONSTRAINT PK_Pago PRIMARY KEY CLUSTERED (id),
+        
+        CONSTRAINT FK_Pago_FormaDePago FOREIGN KEY (idFormaPago)
+            REFERENCES Pago.FormaDePago (idFormaPago)
+    );
+END
+GO
+
+
+IF OBJECT_ID(N'Pago.PagoAplicado', 'U') IS NULL
+BEGIN
+    CREATE TABLE Pago.PagoAplicado (
+        idPago INT NOT NULL, 
+        
+        idDetalleExpensa INT NOT NULL, 
+        
+        importeAplicado DECIMAL(18, 2) NOT NULL, 
+        
+        CONSTRAINT PK_PagoAplicado PRIMARY KEY CLUSTERED (idPago, idDetalleExpensa),
+        
+        CONSTRAINT FK_PagoAplicado_Pago FOREIGN KEY (idPago)
+        REFERENCES Pago.Pago (id)
+        
+        -- La clave foránea a Consorcio.DetalleExpensa debe estar en la posición correcta
+        -- del script general para asegurar que su padre también exista.
+        -- CONSTRAINT FK_PagoAplicado_DetalleExpensa FOREIGN KEY (idDetalleExpensa)
+        -- REFERENCES Consorcio.DetalleExpensa (idDetalleExpensa)
+    );
+END
 GO
