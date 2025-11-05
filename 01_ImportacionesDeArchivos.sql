@@ -16,7 +16,7 @@ GO
 
 -- servicios.servicios.json
 
--- Función de Limpieza: Crea un nuevo lote con GO
+-- Funciï¿½n de Limpieza: Crea un nuevo lote con GO
 IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Negocio.LimpiarNumero;
 GO
 
@@ -32,7 +32,7 @@ BEGIN
     -- 2. Reemplazar la coma 
     SET @ImporteLimpio = REPLACE(@ImporteLimpio, ',', '.');
     
-    -- Manejo de valores vacíos o NULL antes de la conversión
+    -- Manejo de valores vacï¿½os o NULL antes de la conversiï¿½n
     IF ISNUMERIC(@ImporteLimpio) = 1
     BEGIN
         RETURN CONVERT(DECIMAL(18, 2), @ImporteLimpio);
@@ -101,7 +101,7 @@ BEGIN
 
 
  
-    -- 2- almacenar a Negocio.GastoOrdinario (Búsqueda de FK y Mapeo)
+    -- 2- almacenar a Negocio.GastoOrdinario (Bï¿½squeda de FK y Mapeo)
     
     INSERT INTO Negocio.GastoOrdinario (
         idExpensa, nombreEmpresaoPersona, nroFactura, fechaEmision, importeTotal, detalle, tipoServicio
@@ -134,7 +134,7 @@ BEGIN
         -- nroFactura
         CAST(ABS(CHECKSUM(NEWID() + CAST(@@SPID AS VARCHAR(10)))) AS VARCHAR(50)) AS nroFactura,
         
-        -- fechaEmision (asumo que el año es actual)
+        -- fechaEmision (asumo que el aï¿½o es actual)
         DATEFROMPARTS(YEAR(GETDATE()), 
                       CASE LTRIM(RTRIM(LOWER(S.Mes)))
                           WHEN 'enero' THEN 1 WHEN 'febrero' THEN 2 WHEN 'marzo' THEN 3
@@ -168,7 +168,7 @@ BEGIN
              CASE S.TipoGastoBruto WHEN 'SERVICIOS PUBLICOS-Agua' THEN 'AYSA' 
                                    WHEN 'SERVICIOS PUBLICOS-Luz' THEN 'EDENOR' 
                                    ELSE S.TipoGastoBruto END)
-        -- Se asume que el idExpensa es la clave del período
+        -- Se asume que el idExpensa es la clave del perï¿½odo
         AND GO.idExpensa = (
             SELECT TOP 1 E.id FROM Negocio.Expensa AS E
             INNER JOIN Consorcio.Consorcio AS CM ON E.idConsorcio = CM.idConsorcio
@@ -223,7 +223,7 @@ BEGIN
     RAISERROR('Solo se permiten archivos .csv', 16, 1); RETURN;
 END
 
-    PRINT 'Iniciando importación de: ' + @RutaArchivo;
+    PRINT 'Iniciando importaciï¿½n de: ' + @RutaArchivo;
 
 -- Se eliminan las tablas si existen
     DROP TABLE IF EXISTS Persona.CuentaBancaria;
@@ -266,7 +266,7 @@ END
 -- bulk insert
     DECLARE @sql NVARCHAR(MAX);
 
-    PRINT 'Iniciando importación de: ' + @RutaCompleta;
+    PRINT 'Iniciando importaciï¿½n de: ' + @RutaCompleta;
 
     SET @sql = '
         BULK INSERT TemporalPersonas
@@ -336,3 +336,58 @@ EXEC sp_ImportarInquilinosPropietarios
     select * from persona.CuentaBancaria
 
  -- FIN IMPORTACION DE PERSONAS
+
+
+
+--IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
+AS
+BEGIN
+	--armo una temporal para guardar los datos
+	CREATE TABLE #TempConsorciosBulk 
+	( 
+		consorcioCSV VARCHAR(100),
+        nombreCSV VARCHAR(100),
+        direccionCSV VARCHAR(200),
+		cantUnidadesCSV INT,
+        superficieTotalCSV DECIMAL(10, 2)
+    );
+
+	--sql dinamico para encontrar la ruta
+	DECLARE @sqlBulk VARCHAR(1000)
+
+	SET @sqlBulk = 
+			'
+            BULK INSERT #TempConsorciosBulk
+            FROM ''' + @rutaArch + '''
+            WITH (
+                FIELDTERMINATOR = '';'',
+                ROWTERMINATOR = ''\n'',
+                FIRSTROW = 2,
+                CODEPAGE = ''65001''   
+            )
+			'
+    EXEC(@sqlBulk)
+	--Dsps de esto ya tendria todo insertado en la tabla temporal
+	--Ahora tengo q pasar las cosas a la tabla real
+	--Esta actualizacion se hace comparando con el nombre, si no encuentra una coincidencia del nombre en la tabla considera q tenes un consorcio nuevo y lo inserta
+	UPDATE Consorcio
+    SET direccion = Fuente.direccionCSV, metrosCuadradosTotal = Fuente.superficieTotalCSV
+    FROM Consorcio AS Final INNER JOIN #TempConsorciosBulk AS Fuente
+    ON Final.nombre = Fuente.nombreCSV
+    INSERT INTO Consorcio 
+	(
+         nombre,
+         direccion,
+         metrosCuadradosTotal
+    )
+    SELECT Fuente.nombreCSV, Fuente.direccionCSV, Fuente.superficieTotalCSV
+    FROM #TempConsorciosBulk AS Fuente
+	WHERE NOT EXISTS 
+			(
+                SELECT 1
+                FROM Consorcio AS Final
+                WHERE Final.nombre = Fuente.nombreCSV AND Final.direccion = Fuente.direccionCSV
+            ) --basicamente aca se fija q para actualizar ya exista un consorcio con el mismo nombre y direccion y sino inserta uno nuevo
+
+END
