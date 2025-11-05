@@ -389,7 +389,7 @@ BEGIN
 
 
 END
-
+--IMPORTAR DATOS DE PROVEEDORES
 CREATE PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARCHAR(1000) 
 AS
 BEGIN
