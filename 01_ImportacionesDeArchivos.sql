@@ -529,7 +529,7 @@ EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
 */
 
 --_____________________________________________________________________________________________________________________________________________________________
---IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)____________________________________________________________________________________________________
+--IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios)____________________________________________________________________________________________________
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARCHAR(1000)
 AS
 BEGIN
