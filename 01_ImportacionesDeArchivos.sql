@@ -55,6 +55,13 @@ CREATE OR ALTER PROCEDURE Operaciones.ImportacionPago @RutaArchivo VARCHAR(255)
 	AS
 	BEGIN
 
+IF OBJECT_ID('Operaciones.PagosConsorcioTemp') IS NOT NULL DROP TABLE Operaciones.PagosConsorcioTemp; 
+CREATE TABLE Operaciones.PagosConsorcioTemp (
+				idPago int , 
+				fecha VARCHAR(10),
+				CVU_CBU VARCHAR(22),
+				valor varchar (12))
+
 	   IF CHARINDEX('''', @RutaArchivo) > 0 OR
         CHARINDEX('--', @RutaArchivo) > 0 OR
         CHARINDEX('/*', @RutaArchivo) > 0 OR 
@@ -66,23 +73,23 @@ CREATE OR ALTER PROCEDURE Operaciones.ImportacionPago @RutaArchivo VARCHAR(255)
     END
     ELSE
     BEGIN
+	PRINT('IMPORTANDO DATOS...')
         DECLARE @SQL NVARCHAR(MAX);
-    SET @sql = '
-        BULK INSERT #PagosConsorcio
-        FROM ''' + REPLACE(@RutaArchivo, '''', '''''') + '''
+    SET @SQL = '
+        BULK INSERT Operaciones.PagosConsorcioTemp
+        FROM ''' + @RutaArchivo+ '''
         WITH
         (
-            FIELDTERMINATOR = '';'',
+            FIELDTERMINATOR = '','',
             ROWTERMINATOR = ''\n'',
             CODEPAGE = ''ACP'',
             FIRSTROW = 2
         );';
 
-    EXEC(@sql);
-		
-CREATE TABLE #PagosConsorcio (idPago int , fecha VARCHAR(10),CVU_CBU VARCHAR(22),valor varchar (12))
+    EXEC(@SQL);
+	END	
 
-DELETE FROM #PagosConsorcio-- Elimino las filas nulas en caso de que se generen
+DELETE FROM Operaciones.PagosConsorcioTemp-- Elimino las filas nulas en caso de que se generen
 WHERE 
     idPago IS NULL
     AND fecha IS NULL
@@ -91,18 +98,18 @@ WHERE
 
 
 --Preparo los valores para cargar la tabla Pago.Pago 
-UPDATE #PagosConsorcio
+UPDATE Operaciones.PagosConsorcioTemp
 	SET valor = REPLACE(Valor, '$', '')
 
 
-UPDATE #PagosConsorcio
+UPDATE Operaciones.PagosConsorcioTemp
 	SET valor = CAST(valor AS DECIMAL(18,2))
 
 
-UPDATE #PagosConsorcio
+UPDATE Operaciones.PagosConsorcioTemp
 	SET fecha = CONVERT(DATE, fecha, 103)
 
-ALTER TABLE #PagosConsorcio
+ALTER TABLE Operaciones.PagosConsorcioTemp
 	ADD idFormaPago INT
 
 --inserto un valor provisorio para importar a la tabla Pago.FormaDePago
@@ -111,21 +118,22 @@ SET P.idFormaPago = (
     SELECT TOP 1 idFormaPago
     FROM Pago.FormaDePago
 )
-FROM #PagosConsorcio AS P;
+FROM Operaciones.PagosConsorcioTemp AS P;
+
 
    INSERT INTO Pago.Pago(fecha ,importe , cbuCuentaOrigen, idFormaPago)
    select fecha, valor,CVU_CBU,idFormaPago
-   from #PagosConsorcio
+   from Operaciones.PagosConsorcioTemp
    where idPago IS NOT NULL
+
 --SELECT *from pago.pago
---SELECT* FROM #PagosConsorcio
-DROP TABLE #PagosConsorcio	
+--SELECT *from pago.FormaDepago
+--SELECT* FROM Operaciones.PagosConsorcio
+
+DROP TABLE Operaciones.PagosConsorcioTemp	
 END
 GO
 
-EXEC Pago.ImportacionPago
-
-select * from Pago.FormaDePago
 -- Funcion de Limpieza: Crea un nuevo lote con GO
 IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Negocio.LimpiarNumero;
 CREATE or alter FUNCTION Operaciones.ObtenerDiaHabil
