@@ -50,7 +50,7 @@ GO
 
 use [Com5600G11];
 go 
-
+--Funcion para cargar el archivo pagos_consorcios.csv
 CREATE OR ALTER PROCEDURE Operaciones.ImportacionPago @RutaArchivo VARCHAR(255)
 	AS
 	BEGIN
