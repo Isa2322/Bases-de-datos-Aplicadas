@@ -457,6 +457,103 @@ BEGIN
 
 END
 GO
+--____________________________________________________________________________________________________
+
+CREATE PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArchivoCSV VARCHAR(1000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    --tabla para el bulk insert del archivo
+    CREATE TABLE #TempProveedoresGastoOriginal 
+    (
+        tipoGasto VARCHAR(100),
+        columnaMixta VARCHAR(200),    
+        detalleAlternativo VARCHAR(200),
+        nomConsorcio VARCHAR(100)  
+    )
+
+    --tabla para los datos procesados
+    CREATE TABLE #TempProveedoresGastoProcesado 
+    (
+        tipoGasto VARCHAR(100),
+        nomEmpresa VARCHAR(200),    
+        detalle VARCHAR(200),
+        nomConsorcio VARCHAR(100)  
+    )
+
+    BEGIN TRY
+        --bulkeo asi como vino el archivo (sql dinamico para no hardcodear la ruta)
+        DECLARE @sqlBulk VARCHAR(2000);
+        SET @sqlBulk = '
+            BULK INSERT #TempProveedoresGastoOriginal
+            FROM ''' + @rutaArchivoCSV + '''
+            WITH (
+                FIELDTERMINATOR = '';'',
+                ROWTERMINATOR = ''\n'',
+                FIRSTROW = 2, -- Asumo que tu CSV tiene encabezados
+                CODEPAGE = ''65001''
+            )'
+        EXEC sys.sp_executesql @sqlBulk
+
+        --procesamiento para extraer el detalle o poner lo q dice en la 3 columna
+        INSERT INTO #TempProveedoresGastoProcesado 
+        (
+            tipoGasto,
+            nomEmpresa,
+            detalle,
+            nomConsorcio
+        )
+        SELECT tipoGasto,
+            -- el segundo campo (tipo gasto) esta en la columna 2 antes del guion, lo extraigo
+            CASE
+                WHEN CHARINDEX('-', columnaMixta) > 0 
+                --si encuentra un - devuelve algo mayor a cero
+                THEN TRIM(LEFT(columnaMixta, CHARINDEX('-', columnaMixta) - 1))
+                --le indico con trim hasta donde cortar el dato, desde la izquierda hasta donde este el guion
+                ELSE columnaMixta 
+                --si no hay guion se usa el nombre en la columna nomas
+            END AS nomEmpresa,
+            -- el tercer campo (detalle) es o lo q viene dsps del guion o la columna 3
+            CASE
+                WHEN CHARINDEX('-', columnaMixta) > 0 
+                THEN TRIM(RIGHT(columnaMixta, LEN(columnaMixta) - CHARINDEX('-', columnaMixta)))
+                --si hay guion corto lo q haya a la derecha de el y ese es el detalle
+                ELSE detalleAlternativo 
+                -- si no hay guion, el detalle es la col 3
+            END AS detalle,
+            nomConsorcio
+        FROM
+            #TempProveedoresGastoOriginal
+        
+        --guardo en la tabla q corresponde usando la tabla procesada
+        UPDATE GastoOrdinario
+        SET
+            GastoOrdinario.nomEmpresaoPersona = T_Proc.nomEmpresaoPersona,
+            GastoOrdinario.detalle = T_Proc.detalle
+        FROM
+            GastoOrdinario
+        JOIN
+            Expensa ON GastoOrdinario.idExpensa = Expensa.id
+        JOIN
+            Consorcio ON Expensa.consorcioId = Consorcio.id
+        JOIN
+            -- join con tabla procesada
+            #TempProveedoresGastoProcesado AS T_Proc 
+            -- Usamos el tipoGasto que extrajimos para el JOIN
+            ON GastoOrdinario.tipoGasto = T_Proc.tipoGasto
+            AND Consorcio.nombre = T_Proc.nombreConsorcio;
+
+    END TRY
+    BEGIN CATCH
+        PRINT 'Error durante la importacion de datos de Proveedores:';
+        PRINT ERROR_MESSAGE();
+    END CATCH
+    -- limpio las temps
+    DROP TABLE #TempProveedoresGastoRaw;
+    DROP TABLE #TempProveedoresGastoProcesado;
+    SET NOCOUNT OFF;
+END;
+GO
 
 --____________________________________________________________________________________________________
 
