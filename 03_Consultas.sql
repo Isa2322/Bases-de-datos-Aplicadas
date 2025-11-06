@@ -6,70 +6,110 @@ IF OBJECT_ID('sp_analizar_flujo_egresos_semanal', 'P') IS NOT NULL
 GO
 
 CREATE PROCEDURE sp_analizar_flujo_egresos_semanal
+(
+    @NombreConsorcio VARCHAR(100),
+    @PeriodoAnio INT,
+    @PeriodoMes INT
+)
 AS
 BEGIN
-    SET NOCOUNT ON;-- no cuentas las filas afectadas
+    SET NOCOUNT ON;
 
-    -- estos son CTE concatenados
-    WITH EgresosCombinados AS ( -- primer CTE
-        --  Ordinarios
+    DECLARE @IdConsorcio INT;
+    DECLARE @IdExpensa INT;
+
+    -- 1. Buscar la Expensa y el ID del Consorcio usando los tres parámetros
+    SELECT 
+        @IdConsorcio = C.id,
+        @IdExpensa = E.id
+    FROM Consorcio.Consorcio AS C
+    INNER JOIN Negocio.Expensa AS E ON E.consorcio_id = C.id
+    WHERE C.nombre = @NombreConsorcio 
+      AND E.fechaPeriodoAnio = @PeriodoAnio 
+      AND E.fechaPeriodoMes = @PeriodoMes;
+
+    -- 2. Validar si la Expensa fue encontrada
+    IF @IdExpensa IS NULL
+    BEGIN
+        IF @IdConsorcio IS NULL
+        BEGIN
+             RAISERROR('El Consorcio con nombre "%s" no fue encontrado.', 16, 1, @NombreConsorcio);
+        END
+        ELSE
+        BEGIN
+             RAISERROR('La Expensa para el Consorcio "%s" en el periodo %d/%d no fue encontrada.', 16, 1, @NombreConsorcio, @PeriodoMes, @PeriodoAnio);
+        END
+        RETURN;
+    END;
+
+    -- 3. Inicia la lógica de CTE
+    ; WITH EgresosCombinados AS ( 
+        -- Ordinarios
         SELECT
             fechaEmision,
             importeTotal AS Gasto_Ordinario,
             0.00 AS Gasto_Extraordinario,
             importeTotal AS Gasto_Total
         FROM Negocio.GastoOrdinario
+        WHERE idExpensa = @IdExpensa 
         
         UNION ALL
         
-        --  extraordinarios
+        -- Extraordinarios
         SELECT
             fechaEmision,
             0.00 AS Gasto_Ordinario,
             importeTotal AS Gasto_Extraordinario,
             importeTotal AS Gasto_Total
         FROM Negocio.GastoExtraordinario
+        WHERE idExpensa = @IdExpensa
     ),
-    EgresosSemanal AS ( -- otro CTE
-        -- Agrupar los egresos por semana
+    EgresosSemanal AS ( 
+        -- Agrupar los egresos por semana de todos los meses
         SELECT
-            YEAR(fechaEmision) AS Año,-- agregue estos campos para que sea mas descriptivo
-            Month(fechaEmision) AS mes, -- agregue estos campos para que sea mas descriptivo
-            DATEPART(wk, fechaEmision) AS Semana,
+            YEAR(fechaEmision) AS Anio,
+            MONTH(fechaEmision) AS Mes,
+            DATEPART(wk, fechaEmision) AS Semana, -- obtiene la semana 
             SUM(Gasto_Ordinario) AS Gasto_Ordinario_Semanal,
             SUM(Gasto_Extraordinario) AS Gasto_Extraordinario_Semanal,
             SUM(Gasto_Total) AS Gasto_Semanal_Total
         FROM EgresosCombinados
-        GROUP BY YEAR(fechaEmision), Month(fechaEmision), DATEPART(wk, fechaEmision)
+        GROUP BY YEAR(fechaEmision), MONTH(fechaEmision), DATEPART(wk, fechaEmision)
     )
+    
+    -- 4. SELECT final
     SELECT
-        ES.Año,
-        ES.mes,
+        @NombreConsorcio AS Nombre_Consorcio, 
+        @IdConsorcio AS ID_Consorcio,
+        @IdExpensa AS ID_Expensa,
+        FORMAT(CAST(CAST(@PeriodoAnio AS VARCHAR) + '-' + CAST(@PeriodoMes AS VARCHAR) + '-01' AS DATE), 'yyyy-MM') AS Periodo,
+        ES.Anio,
+        ES.Mes,
         ES.Semana,
 
-        -- segun buesque se puede mostrar como N(numero) 2 (digitos decimales)
+        -- N2 : Numero 2 Digitos decimales
         FORMAT(ES.Gasto_Ordinario_Semanal, 'N2') AS Egreso_Ordinario,
         FORMAT(ES.Gasto_Extraordinario_Semanal, 'N2') AS Egreso_Extraordinario,
         FORMAT(ES.Gasto_Semanal_Total, 'N2') AS Egreso_Semanal_Total,
         
-        -- Acumulado Progresivo (Total de egresos hasta la semana actual)
+         -- Acumulado Progresivo
         FORMAT(SUM(ES.Gasto_Semanal_Total) OVER (
-            ORDER BY ES.Año, ES.Semana
-            -- toma el valor de la fila actual y le suma todos los valores de las filas anteriores
-            ROWS UNBOUNDED PRECEDING
-
+         ORDER BY ES.Anio, ES.Semana
+        ROWS UNBOUNDED PRECEDING
         ), 'N2') AS Acumulado_Progresivo,
         
-        -- Promedio en el Periodo (El promedio simple de todos los egresos semanales)
-        FORMAT(AVG(ES.Gasto_Semanal_Total) OVER (), 'N2') AS Promedio_Periodo
+        -- Promedio en el Periodo
+    FORMAT(AVG(ES.Gasto_Semanal_Total) OVER (), 'N2') AS Promedio_Periodo
         
     FROM EgresosSemanal AS ES
-    ORDER BY ES.Año, ES.Semana;
+    where  @PeriodoAnio= ES.Anio AND @PeriodoMes =  ES.Mes
+    ORDER BY ES.Anio, ES.Semana;
 END
 GO
 
+
 -- 4
-CREATE PROCEDURE Negocio.SP_ObtenerTop5MesesGastosIngresos
+CREATE or alter PROCEDURE Negocio.SP_ObtenerTop5MesesGastosIngresos
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -157,7 +197,7 @@ BEGIN
 END
 GO
 
-EXEC Negocio.SP_ObtenerTop5MesesGastosIngresos;
-GO
+--EXEC Negocio.SP_ObtenerTop5MesesGastosIngresos;
+--GO
 -- =============================================
 

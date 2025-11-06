@@ -45,6 +45,97 @@ GO
 --IF OBJECT_ID('Operaciones.ObtenerDiaHabil') IS NOT NULL DROP FUNCTION Operaciones.ObtenerDiaHabil;
 --GO
 
+
+-- servicios.servicios.json
+
+use [Com5600G11];
+go 
+--Funcion para cargar el archivo pagos_consorcios.csv
+CREATE OR ALTER PROCEDURE Operaciones.ImportacionPago @RutaArchivo VARCHAR(255)
+	AS
+	BEGIN
+
+IF OBJECT_ID('Operaciones.PagosConsorcioTemp') IS NOT NULL DROP TABLE Operaciones.PagosConsorcioTemp; 
+CREATE TABLE Operaciones.PagosConsorcioTemp (
+				idPago int , 
+				fecha VARCHAR(10),
+				CVU_CBU VARCHAR(22),
+				valor varchar (12))
+
+	   IF CHARINDEX('''', @RutaArchivo) > 0 OR
+        CHARINDEX('--', @RutaArchivo) > 0 OR
+        CHARINDEX('/*', @RutaArchivo) > 0 OR 
+        CHARINDEX('*/', @RutaArchivo) > 0 OR
+        CHARINDEX(';', @RutaArchivo) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END
+    ELSE
+    BEGIN
+	PRINT('IMPORTANDO DATOS...')
+        DECLARE @SQL NVARCHAR(MAX);
+    SET @SQL = '
+        BULK INSERT Operaciones.PagosConsorcioTemp
+        FROM ''' + @RutaArchivo+ '''
+        WITH
+        (
+            FIELDTERMINATOR = '','',
+            ROWTERMINATOR = ''\n'',
+            CODEPAGE = ''ACP'',
+            FIRSTROW = 2
+        );';
+
+    EXEC(@SQL);
+	END	
+
+DELETE FROM Operaciones.PagosConsorcioTemp-- Elimino las filas nulas en caso de que se generen
+WHERE 
+    idPago IS NULL
+    AND fecha IS NULL
+    AND CVU_CBU IS NULL
+	AND valor IS NULL;
+
+
+--Preparo los valores para cargar la tabla Pago.Pago 
+UPDATE Operaciones.PagosConsorcioTemp
+	SET valor = REPLACE(Valor, '$', '')
+
+
+UPDATE Operaciones.PagosConsorcioTemp
+	SET valor = CAST(valor AS DECIMAL(18,2))
+
+
+UPDATE Operaciones.PagosConsorcioTemp
+	SET fecha = CONVERT(DATE, fecha, 103)
+
+ALTER TABLE Operaciones.PagosConsorcioTemp
+	ADD idFormaPago INT
+
+--inserto un valor provisorio para importar a la tabla Pago.FormaDePago
+UPDATE P
+SET P.idFormaPago = (
+    SELECT TOP 1 idFormaPago
+    FROM Pago.FormaDePago
+)
+FROM Operaciones.PagosConsorcioTemp AS P;
+
+
+   INSERT INTO Pago.Pago(fecha ,importe , cbuCuentaOrigen, idFormaPago)
+   select fecha, valor,CVU_CBU,idFormaPago
+   from Operaciones.PagosConsorcioTemp
+   where idPago IS NOT NULL
+
+--SELECT *from pago.pago
+--SELECT *from pago.FormaDepago
+--SELECT* FROM Operaciones.PagosConsorcio
+
+DROP TABLE Operaciones.PagosConsorcioTemp	
+END
+GO
+
+-- Funcion de Limpieza: Crea un nuevo lote con GO
+IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Negocio.LimpiarNumero;
 CREATE or alter FUNCTION Operaciones.ObtenerDiaHabil
 (
     @Año INT,
