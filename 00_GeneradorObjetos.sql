@@ -66,7 +66,7 @@ GO
 USE [Com5600G11]
 GO
 
-
+--   CREACION  DE  ESQUEMAS  _________________________________________________________
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Operaciones')
 BEGIN
     EXEC('CREATE SCHEMA Operaciones');
@@ -78,16 +78,6 @@ BEGIN
 END
 GO
 
-/*
-IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Persona')
-BEGIN
-    EXEC('CREATE SCHEMA Persona');
-END
-GO
-*/
-
-
---   CREACION  DE  ESQUEMAS  _________________________________________________________
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Negocio')
 BEGIN
     EXEC('CREATE SCHEMA Negocio');
