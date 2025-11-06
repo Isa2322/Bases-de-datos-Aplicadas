@@ -535,3 +535,93 @@ BEGIN
         VALUES (source.CVU_CBUPersona,  source.numero, source.piso, source.departamento, source.ID_Consorcio);
 END
 GO
+
+CREATE OR ALTER PROCEDURE Consorcio.sp_ImportarUFporConsorcio
+@RutaArchivo VARCHAR(500)
+AS
+BEGIN
+SET NOCOUNT ON;
+
+RAISERROR('--- INICIO: Importación de Unidades Funcionales por Consorcio ---', 0, 1) WITH NOWAIT;
+
+IF CHARINDEX('..', @RutaArchivo) > 0 OR
+   CHARINDEX(';', @RutaArchivo) > 0 OR
+   CHARINDEX('--', @RutaArchivo) > 0 OR
+   CHARINDEX('/*', @RutaArchivo) > 0 OR
+   CHARINDEX('*/', @RutaArchivo) > 0
+BEGIN
+    RAISERROR('Error: Ruta contiene caracteres no permitidos.', 16, 1);
+    RETURN;
+END;
+
+IF RIGHT(LOWER(@RutaArchivo), 4) <> '.csv'
+BEGIN
+    RAISERROR('Error: Solo se permiten archivos con extensión .csv', 16, 1);
+    RETURN;
+END;
+
+IF OBJECT_ID('tempdb..#TemporalUF') IS NOT NULL DROP TABLE #TemporalUF;
+
+CREATE TABLE #TemporalUF (
+    CVU_CBU CHAR(22),
+    nombreConsorcio VARCHAR(100),
+    nroUnidadFuncional INT,
+    piso VARCHAR(10),
+    departamento VARCHAR(10)
+);
+
+DECLARE @SQL NVARCHAR(MAX);
+SET @SQL = '
+    BULK INSERT #TemporalUF
+    FROM ''' + @RutaArchivo + '''
+    WITH (
+        FIELDTERMINATOR = ''|'',
+        ROWTERMINATOR = ''0x0a'',
+        FIRSTROW = 2,
+        CODEPAGE = ''65001''
+    );
+';
+EXEC sp_executesql @SQL;
+
+RAISERROR('Carga en tabla temporal completada. Insertando/actualizando datos...', 0, 1) WITH NOWAIT;
+
+INSERT INTO Consorcio.Consorcio (nombre, direccion, metrosCuadradosTotal)
+SELECT DISTINCT T.nombreConsorcio, 'Dirección desconocida', 0
+FROM #TemporalUF AS T
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM Consorcio.Consorcio AS C
+    WHERE C.nombre = T.nombreConsorcio
+);
+
+MERGE Consorcio.UnidadFuncional AS target
+USING (
+    SELECT 
+        T.CVU_CBU,
+        C.id AS consorcioId,
+        CAST(T.nroUnidadFuncional AS VARCHAR(10)) AS numero,
+        T.piso,
+        T.departamento
+    FROM #TemporalUF AS T
+    INNER JOIN Consorcio.Consorcio AS C ON T.nombreConsorcio = C.nombre
+) AS source
+ON target.CVU_CBU = source.CVU_CBU
+WHEN MATCHED THEN
+    UPDATE SET 
+        target.consorcioId = source.consorcioId,
+        target.numero = source.numero,
+        target.piso = source.piso,
+        target.departamento = source.departamento
+WHEN NOT MATCHED THEN
+    INSERT (CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas)
+    VALUES (source.CVU_CBU, source.consorcioId, source.numero, source.piso, source.departamento, 50, 10); -- valores de prueba
+
+RAISERROR('Importación completada correctamente.', 0, 1) WITH NOWAIT;
+
+DROP TABLE #TemporalUF;
+
+RAISERROR('--- FIN: Importación de Unidades Funcionales por Consorcio ---', 0, 1) WITH NOWAIT;
+
+
+END;
+GO
