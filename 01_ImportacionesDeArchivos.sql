@@ -346,35 +346,28 @@ BEGIN
 END
 GO
 
+
+--____________________________________________________________________________________________________________________________
 -- IMPORTACION DE PERSONAS ___________________________________________________________________________________________________
 
 use [Com5600G11];
 GO
-DROP PROCEDURE IF EXISTS sp_ImportarInquilinosPropietarios;
-GO
 
-CREATE PROCEDURE sp_ImportarInquilinosPropietarios
+CREATE OR ALTER PROCEDURE sp_ImportarInquilinosPropietarios
     @RutaArchivo VARCHAR(255)
 AS
 BEGIN
 
-DECLARE @Carpeta VARCHAR(255) = 'C:\Users\Abigail\Downloads\consorcios\';
-DECLARE @RutaCompleta  NVARCHAR(4000);
     SET NOCOUNT ON;
 
-    IF CHARINDEX('..', @RutaArchivo) > 0
-    OR CHARINDEX(';', @RutaArchivo) > 0
-    OR CHARINDEX('--', @RutaArchivo) > 0
-    OR CHARINDEX('/*', @RutaArchivo) > 0
-    OR CHARINDEX('/', @RutaArchivo) > 0 
-    OR CHARINDEX('\', @RutaArchivo) > 0 
-    OR PATINDEX('%[;''"%]%', @RutaArchivo) > 0 
+    IF CHARINDEX('''', @RutaArchivo) > 0 OR
+        CHARINDEX('--', @RutaArchivo) > 0 OR
+        CHARINDEX('/*', @RutaArchivo) > 0 OR 
+        CHARINDEX('*/', @RutaArchivo) > 0 OR
+        CHARINDEX(';', @RutaArchivo) > 0
+    BEGIN
 BEGIN
     RAISERROR('Nombre de archivo contiene caracteres invalidos.', 16, 1); RETURN;
-END
-IF RIGHT(LOWER(@RutaArchivo),4) <> '.csv'
-BEGIN
-    RAISERROR('Solo se permiten archivos .csv', 16, 1); RETURN;
 END
 
     PRINT 'Iniciando importaci�n de: ' + @RutaArchivo;
@@ -388,20 +381,19 @@ END
         DNI BIGINT,
         Email VARCHAR(50),
         Telefono BIGINT,
-        CBU VARCHAR(22),
+        CVU_CBU VARCHAR(22),
         Tipo VARCHAR(20)
     );
 
-    SET @RutaCompleta = @Carpeta + @RutaArchivo;
 
 -- bulk insert
     DECLARE @sql NVARCHAR(MAX);
 
-    PRINT 'Iniciando importaci�n de: ' + @RutaCompleta;
+    PRINT 'Iniciando importaci�n de: ' + @RutaArchivo;
 
     SET @sql = '
         BULK INSERT TemporalPersonas
-        FROM ''' + REPLACE(@RutaCompleta, '''', '''''') + '''
+        FROM ''' + @RutaArchivo + '''
         WITH
         (
             FIELDTERMINATOR = '';'',
@@ -420,53 +412,48 @@ END
         (DNI IS NULL OR DNI = '') AND
         (Email IS NULL OR Email = '') AND
         (Telefono IS NULL OR Telefono = '') AND
-        (CBU IS NULL OR CBU = '') AND
+        (CVU_CBU IS NULL OR CVU_CBU = '') AND
         (Tipo IS NULL OR Tipo = '');
 
 
 -- Se insertan los archivos en las tablas correspondientes
 
     DELETE FROM TemporalPersonas
-    WHERE CBU IN (
-        SELECT CBU
+    WHERE CVU_CBU IN (
+        SELECT CVU_CBU
         FROM TemporalPersonas
-        GROUP BY CBU
+        GROUP BY CVU_CBU
         HAVING COUNT(*) > 1
 );
 
-    INSERT INTO Persona.Persona (DNI, Nombre, Apellido, CBU, Telefono, Email, Tipo)
+    INSERT INTO Consorcio.Persona (DNI, Nombre, Apellido, CVU_CBU, Telefono, Email, Tipo)
     SELECT 
         DNI,
-        LTRIM(RTRIM(Nombre)) AS Nombre,
+        LTRIM(RTRIM(nombre)) AS Nombre,
         LTRIM(RTRIM(Apellido)) AS Apellido,
-        LTRIM(RTRIM(CBU)) AS CBU,
+        LTRIM(RTRIM(CVU_CBU)) AS CVU_CBU,
         Telefono,
         REPLACE(LTRIM(RTRIM(Email)), ' ', '') AS Email,
         LTRIM(RTRIM(Tipo)) AS Tipo
     FROM TemporalPersonas;
 
     -- join de persona y cuenta bancaria por CBU para insertar con la FK
-   INSERT INTO Persona.CuentaBancaria (CBU, TitularId)
+   INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, TitularId)
     SELECT DISTINCT 
-        LTRIM(RTRIM(it.CBU)) AS CBU,
-        p.ID
+        LTRIM(RTRIM(it.CVU_CBU)) AS cbu,
+        p.idPersona
     FROM TemporalPersonas it
-    JOIN Persona.Persona p ON LTRIM(RTRIM(p.CBU)) = LTRIM(RTRIM(it.CBU))
-    WHERE it.CBU IS NOT NULL AND it.CBU <> '';
+    JOIN Consorcio.Persona p ON LTRIM(RTRIM(p.CVU_CBU)) = LTRIM(RTRIM(it.CVU_CBU))
+    WHERE it.CVU_CBU IS NOT NULL AND it.CVU_CBU <> '';
 
 
     DROP TABLE IF EXISTS dbo.TemporalPersonas
 END;
 GO
 
-EXEC sp_ImportarInquilinosPropietarios 
-    @RutaArchivo = 'Inquilino-propietarios-datos.csv';
-
-
-   select * from Persona.Persona
-    select * from persona.CuentaBancaria
-GO
+select * from Consorcio.Persona
  -- FIN IMPORTACION DE PERSONAS
+--__________________________________________________________________________________________________________________________
 
 
 
@@ -703,7 +690,7 @@ BEGIN
 END
 GO
 
--- ___________________________________________________________________________
+--_______________________________________________________________________________________________________________________
 
 CREATE OR ALTER PROCEDURE Consorcio.sp_ImportarUFporConsorcio
 @RutaArchivo VARCHAR(500)
@@ -762,6 +749,7 @@ WHERE NOT EXISTS (
     FROM Consorcio.Consorcio AS C
     WHERE C.nombre = T.nombreConsorcio
 );
+
 
 MERGE Consorcio.UnidadFuncional AS target
 USING (

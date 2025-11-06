@@ -62,7 +62,7 @@ BEGIN
     PRINT N'Base de datos Com5600G11 eliminada correctamente.'
 END
 GO
-*/ 
+ */
 
 IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'Com5600G11')
 BEGIN
@@ -76,8 +76,7 @@ ALTER DATABASE Com5600G11
 SET MULTI_USER 
 WITH ROLLBACK IMMEDIATE;
 GO
-*/ 
-
+*/
 use [Com5600G11];
 go 
 
@@ -156,8 +155,7 @@ CREATE TABLE Consorcio.Persona (
     dni VARCHAR(20) NOT NULL UNIQUE,
     email VARCHAR(150),
     telefono VARCHAR(50),
-    cbu VARCHAR(22),
-    cvu VARCHAR(22),
+    CVU_CBU VARCHAR(22),
     idTipoRol INT NOT NULL,
     CONSTRAINT FK_Consorcio_TipoRol FOREIGN KEY (idTipoRol) 
         REFERENCES Consorcio.TipoRol(idTipoRol)
