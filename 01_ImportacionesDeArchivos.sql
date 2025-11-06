@@ -136,6 +136,7 @@ GO
 
 -- Funcion de Limpieza: Crea un nuevo lote con GO
 IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Negocio.LimpiarNumero;
+GO
 CREATE or alter FUNCTION Operaciones.ObtenerDiaHabil
 (
     @Año INT,
@@ -353,7 +354,7 @@ GO
 use [Com5600G11];
 GO
 
-CREATE OR ALTER PROCEDURE sp_ImportarInquilinosPropietarios
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarInquilinosPropietarios
     @RutaArchivo VARCHAR(255)
 AS
 BEGIN
@@ -365,7 +366,7 @@ BEGIN
         CHARINDEX('/*', @RutaArchivo) > 0 OR 
         CHARINDEX('*/', @RutaArchivo) > 0 OR
         CHARINDEX(';', @RutaArchivo) > 0
-    BEGIN
+  
 BEGIN
     RAISERROR('Nombre de archivo contiene caracteres invalidos.', 16, 1); RETURN;
 END
@@ -451,10 +452,8 @@ END
 END;
 GO
 
-select * from Consorcio.Persona
  -- FIN IMPORTACION DE PERSONAS
 --__________________________________________________________________________________________________________________________
-
 
 
 --IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)____________________________________________________________________________
@@ -615,7 +614,7 @@ EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
 
 --____________________________________________________________________________________________________
 
-CREATE OR ALTER PROCEDURE CargaInquilinoPropietariosUF
+CREATE OR ALTER PROCEDURE Operaciones.CargaInquilinoPropietariosUF
     @RutaArchivo VARCHAR(255)
 AS
 BEGIN
@@ -692,7 +691,7 @@ GO
 
 --_______________________________________________________________________________________________________________________
 
-CREATE OR ALTER PROCEDURE Consorcio.sp_ImportarUFporConsorcio
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarUFporConsorcio
 @RutaArchivo VARCHAR(500)
 AS
 BEGIN

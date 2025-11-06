@@ -80,6 +80,7 @@ GO
 use [Com5600G11];
 go 
 
+
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Operaciones')
 BEGIN
     EXEC('CREATE SCHEMA Operaciones');
