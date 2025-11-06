@@ -137,61 +137,68 @@ BEGIN
         Importe DECIMAL(18, 2)
     );
 
-    -- Bloque de carga de datos (Bulk Insert)
-    SET @sql = N'
-    INSERT INTO #TemporalDatosServicio (NombreConsorcio, Mes, TipoGastoBruto, Importe)
-    SELECT
-        J.NombreConsorcio,
-        J.Mes,
-        T.TipoGastoBruto,
-        Operaciones.LimpiarNumero(T.ImporteBruto) 
-    FROM OPENROWSET (BULK ''' + @ruta + ''', SINGLE_CLOB) AS jr
-    CROSS APPLY OPENJSON(BulkColumn)
-    WITH (
-        NombreConsorcio VARCHAR(100) ''$."Nombre del consorcio"'',
-        Mes             VARCHAR(20)  ''$.Mes'',
-        BANCARIOS       VARCHAR(50)  ''$.BANCARIOS'',
-        LIMPIEZA        VARCHAR(50)  ''$.LIMPIEZA'',
-        ADMINISTRACION  VARCHAR(50)  ''$.ADMINISTRACION'',
-        SEGUROS         VARCHAR(50)  ''$.SEGUROS'',
-        GASTOS_GRALES   VARCHAR(50)  ''$."GASTOS GENERALES"'',
-        AGUA            VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Agua"'',
-        LUZ             VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Luz"''
-    ) AS J
-    CROSS APPLY (VALUES 
-        (''BANCARIOS'', J.BANCARIOS),
-        (''LIMPIEZA'', J.LIMPIEZA),
-        (''ADMINISTRACION'', J.ADMINISTRACION),
-        (''SEGUROS'', J.SEGUROS),
-        (''GASTOS GENERALES'', J.GASTOS_GRALES),
-        (''SERVICIOS PUBLICOS-Agua'', J.AGUA), 
-        (''SERVICIOS PUBLICOS-Luz'', J.LUZ)     
-    ) AS T (TipoGastoBruto, ImporteBruto)
-    WHERE Operaciones.LimpiarNumero(T.ImporteBruto) IS NOT NULL 
-        AND Operaciones.LimpiarNumero(T.ImporteBruto) > 0;';
 
-    EXEC sp_executesql @sql
-    
+-- verificar ruta
+    IF CHARINDEX('''', @ruta) > 0 OR
+        CHARINDEX('--', @ruta) > 0 OR
+        CHARINDEX('/*', @ruta) > 0 OR 
+        CHARINDEX('*/', @ruta) > 0 OR
+        CHARINDEX(';', @ruta) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END
+    ELSE
+    BEGIN
+        -- Bloque de carga de datos (Bulk Insert)
+        SET @sql = N'
+        INSERT INTO #TemporalDatosServicio (NombreConsorcio, Mes, TipoGastoBruto, Importe)
+        SELECT
+            J.NombreConsorcio,
+            J.Mes,
+            T.TipoGastoBruto,
+            Operaciones.LimpiarNumero(T.ImporteBruto) 
+        FROM OPENROWSET (BULK ''' + @ruta + ''', SINGLE_CLOB) AS jr
+        CROSS APPLY OPENJSON(BulkColumn)
+        WITH (
+            NombreConsorcio VARCHAR(100) ''$."Nombre del consorcio"'',
+            Mes             VARCHAR(20)  ''$.Mes'',
+            BANCARIOS       VARCHAR(50)  ''$.BANCARIOS'',
+            LIMPIEZA        VARCHAR(50)  ''$.LIMPIEZA'',
+            ADMINISTRACION  VARCHAR(50)  ''$.ADMINISTRACION'',
+            SEGUROS         VARCHAR(50)  ''$.SEGUROS'',
+            GASTOS_GRALES   VARCHAR(50)  ''$."GASTOS GENERALES"'',
+            AGUA            VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Agua"'',
+            LUZ             VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Luz"''
+        ) AS J
+        CROSS APPLY (VALUES 
+            (''BANCARIOS'', J.BANCARIOS),
+            (''LIMPIEZA'', J.LIMPIEZA),
+            (''ADMINISTRACION'', J.ADMINISTRACION),
+            (''SEGUROS'', J.SEGUROS),
+            (''GASTOS GENERALES'', J.GASTOS_GRALES),
+            (''SERVICIOS PUBLICOS-Agua'', J.AGUA), 
+            (''SERVICIOS PUBLICOS-Luz'', J.LUZ)     
+        ) AS T (TipoGastoBruto, ImporteBruto)
+        WHERE Operaciones.LimpiarNumero(T.ImporteBruto) IS NOT NULL 
+            AND Operaciones.LimpiarNumero(T.ImporteBruto) > 0;';
+        EXEC sp_executesql @sql
+    end
     
     -- Bloque de Inserción
     BEGIN TRY
         INSERT INTO Negocio.GastoOrdinario (
             idExpensa, 
-            nombreEmpresaoPersona, 
-            nroFactura, 
+            nombreEmpresaoPersona,
             fechaEmision, 
             importeTotal, 
             detalle, 
-            tipoServicio
+            tipoServicio,
+            nroFactura
         )
         SELECT
             E.id AS idExpensa, 
             S.TipoGastoBruto AS nombreEmpresaoPersona,
-
-            -- Generación de nroFactura (relleno con cero)
-            RIGHT('0000000000' + CAST(
-                (ABS(CHECKSUM(CAST(NEWID() AS VARCHAR(36)))) % 10000000000)
-                AS VARCHAR(10)), 10) AS nroFactura,
         
             -- fechaEmision
             Operaciones.ObtenerDiaHabil(
@@ -207,7 +214,24 @@ BEGIN
             ) AS fechaEmision, 
             S.Importe AS importeTotal,
             null AS detalle,
-            S.TipoGastoBruto AS tipoServicio
+            S.TipoGastoBruto AS tipoServicio,
+
+            -- Generación de nroFactura (10 dígitos en total: 4 + 4 + 2)
+            RIGHT('0000' + CAST(E.id AS VARCHAR(4)), 4) + -- idExpensa (4 dígitos, máx. 9999)
+            RIGHT(
+                CAST((YEAR(GETDATE()) * 100) + 
+                (
+                    CASE LTRIM(RTRIM(LOWER(S.Mes)))
+                        WHEN 'enero' THEN 1 WHEN 'febrero' THEN 2 WHEN 'marzo' THEN 3
+                        WHEN 'abril' THEN 4 WHEN 'mayo' THEN 5 WHEN 'junio' THEN 6
+                        WHEN 'julio' THEN 7 WHEN 'agosto' THEN 8 WHEN 'septiembre' THEN 9
+                        WHEN 'octubre' THEN 10 WHEN 'noviembre' THEN 11 WHEN 'diciembre' THEN 12
+                        ELSE MONTH(GETDATE()) 
+                    END
+                ) AS VARCHAR(6)) -- Se convierte el número YYYYMM (6 dígitos) a texto
+            , 4) + -- Se toma el YYMM (4 dígitos) de la 
+            RIGHT('00' + CAST(ABS(CHECKSUM(S.TipoGastoBruto)) % 100 AS VARCHAR(2)), 2) -- Hash del Tipo de Gasto (2 dígitos)
+            AS nroFactura
 
         FROM #TemporalDatosServicio AS S
             CROSS APPLY (
@@ -252,13 +276,11 @@ BEGIN
     -- eliminar la tabla temporal
     DROP TABLE #TemporalDatosServicio;
 
-    */ 
-
 END
 GO
 
 
--- IMPORTACION DE PERSONAS
+-- IMPORTACION DE PERSONAS ___________________________________________________________________________________________________
 
 use [Com5600G11];
 GO
@@ -407,7 +429,7 @@ GO
 
 
 
---IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)
+--IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)____________________________________________________________________________
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
 AS
 BEGIN
@@ -461,7 +483,7 @@ BEGIN
 END
 GO
 
-
+--____________________________________________________________________________________________________
 
 CREATE OR ALTER PROCEDURE CargaInquilinoPropietariosUF
     @RutaArchivo VARCHAR(255)
@@ -537,6 +559,8 @@ BEGIN
         VALUES (source.CVU_CBUPersona,  source.numero, source.piso, source.departamento, source.ID_Consorcio);
 END
 GO
+
+-- ___________________________________________________________________________
 
 CREATE OR ALTER PROCEDURE Consorcio.sp_ImportarUFporConsorcio
 @RutaArchivo VARCHAR(500)
