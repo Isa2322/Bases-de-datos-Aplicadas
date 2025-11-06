@@ -48,37 +48,25 @@ filesystem, basta con que el resultado de la consulta sea XML.
 respecto a optimizacion de codigo y de tipos de datos.
 */
 
-use master;
+/* Ejecutá TODO este bloque completo */
 
-/*
-IF EXISTS (SELECT name FROM sys.databases WHERE name = 'Com5600G11')
+USE master;
+GO
+-- Me fijo si la base existe y si es asi cierro todo lo q se este haciendo con ella y la dropeo
+IF DB_ID(N'Com5600G11') IS NOT NULL
 BEGIN
-    EXEC msdb.dbo.sp_delete_database_backuphistory @database_name = N'Com5600G11'
-
-    ALTER DATABASE Com5600G11 SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-
-    DROP DATABASE [Com5600G11]
-    
-    PRINT N'Base de datos Com5600G11 eliminada correctamente.'
+    -- saco a todos los q la esten usando
+    ALTER DATABASE [Com5600G11] SET SINGLE_USER WITH ROLLBACK IMMEDIATE
+    -- la dropeo
+    DROP DATABASE [Com5600G11];
 END
 GO
- */
-
-IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'Com5600G11')
-BEGIN
-    CREATE DATABASE Com5600G11;
-END;
+-- CREO LA BASE
+CREATE DATABASE [Com5600G11];
 GO
-
-/*
--- Regresar a modo multi-usuario
-ALTER DATABASE Com5600G11
-SET MULTI_USER 
-WITH ROLLBACK IMMEDIATE;
+-- USO LA BASE DEL TP
+USE [Com5600G11];
 GO
-*/
-use [Com5600G11];
-go 
 
 
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Operaciones')
@@ -150,6 +138,7 @@ BEGIN
     )
 END
 GO
+
 --PERSONA
 IF OBJECT_ID('Consorcio.Persona', 'U') IS NOT NULL
 DROP TABLE Consorcio.Persona;
