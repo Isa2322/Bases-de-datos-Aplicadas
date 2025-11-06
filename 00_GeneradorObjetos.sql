@@ -100,6 +100,8 @@ END
 GO
 */
 
+
+--   CREACION  DE  ESQUEMAS  _________________________________________________________
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Negocio')
 BEGIN
     EXEC('CREATE SCHEMA Negocio');
@@ -132,7 +134,10 @@ BEGIN
     PRINT N'schema "Pago" ya existe: no se creo nada.';
 END
 GO
--- TABLA: Consorcio.TipoRol
+
+-- CREACION  DE   TABLAS   _________________________________________________________
+
+--TIPO ROL
 IF OBJECT_ID('Consorcio.TipoRol', 'U') IS NOT NULL
     DROP TABLE Consorcio.TipoRol;
 GO
@@ -143,12 +148,10 @@ CREATE TABLE Consorcio.TipoRol (
     descripcion VARCHAR(200)
 );
 GO
-
--- Tabla: Persona
+--PERSONA
 IF OBJECT_ID('Consorcio.Persona', 'U') IS NOT NULL
     DROP TABLE Consorcio.Persona;
 GO
-
 CREATE TABLE Consorcio.Persona (
     idPersona INT IDENTITY(1,1) PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
@@ -162,7 +165,7 @@ CREATE TABLE Consorcio.Persona (
         REFERENCES Consorcio.TipoRol(idTipoRol)
 );
 GO
-
+--CUENTA BANCARIA
 IF OBJECT_ID(N'Consorcio.CuentaBancaria','U') IS NULL
 BEGIN
 	CREATE TABLE Consorcio.CuentaBancaria(
@@ -172,7 +175,7 @@ BEGIN
 		)
 END
 GO
-
+--CONSORCIO
 IF OBJECT_ID(N'Consorcio.Consorcio','U') IS NULL
 BEGIN
 	CREATE TABLE Consorcio.Consorcio(
@@ -188,7 +191,7 @@ BEGIN
 
 END
 GO
-
+--FORMA DE PAGO
 IF OBJECT_ID(N'Pago.FormaDePago', 'U') IS NULL
 BEGIN
     CREATE TABLE Pago.FormaDePago (
@@ -199,7 +202,7 @@ BEGIN
     );
 END
 GO
-
+--EXPENSA
 IF OBJECT_ID(N'Negocio.Expensa', 'U') IS NULL
 BEGIN
 CREATE TABLE Negocio.Expensa(
@@ -217,7 +220,7 @@ CREATE TABLE Negocio.Expensa(
 );
 END
 GO
-
+--UNIDAD FUNCIONAL
 IF OBJECT_ID(N'Consorcio.UnidadFuncional', 'U') IS NULL
 BEGIN
     CREATE TABLE Consorcio.UnidadFuncional
@@ -240,7 +243,7 @@ BEGIN
     );
 END
 GO
-
+--GASTO ORDINARIO
 IF OBJECT_ID(N'Negocio.GastoOrdinario', 'U') IS NULL
 CREATE TABLE Negocio.GastoOrdinario (
     idGasto INT PRIMARY KEY IDENTITY,
@@ -265,7 +268,7 @@ CREATE TABLE Negocio.GastoOrdinario (
         REFERENCES Negocio.Expensa(id) 
 )
 GO
-
+--GASTO EXTRAORDINARIO
 IF OBJECT_ID(N'Negocio.GastoExtraordinario', 'U') IS NULL
 BEGIN
 CREATE TABLE Negocio.GastoExtraordinario (
@@ -284,7 +287,7 @@ CREATE TABLE Negocio.GastoExtraordinario (
 )
 END
 GO
-
+--PAGO
 IF OBJECT_ID(N'Pago.Pago', 'U') IS NULL
 BEGIN
     CREATE TABLE Pago.Pago (
@@ -301,7 +304,7 @@ BEGIN
     );
 END
 GO
-
+--DETALLE EXPENSA
 IF OBJECT_ID(N'Negocio.DetalleExpensa', 'U') IS NULL
 BEGIN
 CREATE TABLE Negocio.DetalleExpensa(
@@ -321,7 +324,7 @@ CREATE TABLE Negocio.DetalleExpensa(
 );
 END
 GO
-
+--COCHERA
 IF OBJECT_ID(N'Consorcio.Cochera', 'U') IS NULL
 BEGIN
     CREATE TABLE Consorcio.Cochera
@@ -336,7 +339,7 @@ BEGIN
     );
 END
 GO
-
+--BAULERA
 IF OBJECT_ID(N'Consorcio.Baulera', 'U') IS NULL
 BEGIN
     CREATE TABLE Consorcio.Baulera
@@ -351,7 +354,7 @@ BEGIN
     );
 END
 GO
-
+--PAGO APLICADO
 IF OBJECT_ID(N'Pago.PagoAplicado', 'U') IS NULL
 BEGIN
     CREATE TABLE Pago.PagoAplicado (

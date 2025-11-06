@@ -455,7 +455,7 @@ GO
  -- FIN IMPORTACION DE PERSONAS
 --__________________________________________________________________________________________________________________________
 
-
+--_____________________________________________________________________________________________________________________________________
 --IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)____________________________________________________________________________
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
 AS
@@ -509,8 +509,15 @@ BEGIN
 
 END
 GO
---____________________________________________________________________________________________________
 
+/*  PRUEBO SP
+DECLARE @rutaArchCSV VARCHAR(1000)
+SET @rutaArchCSV = 'C:\Users\camil\OneDrive\Escritorio\Facultad\BDD\datos varios(Consorcios).csv'
+EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
+*/
+
+--_____________________________________________________________________________________________________________________________________________________________
+--IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios)____________________________________________________________________________________________________
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARCHAR(1000)
 AS
 BEGIN
@@ -606,13 +613,14 @@ BEGIN
     SET NOCOUNT OFF;
 END;
 GO
+
 /*  PRUEBO SP
 DECLARE @rutaArchCSV VARCHAR(1000)
 SET @rutaArchCSV = 'C:\Users\camil\OneDrive\Escritorio\Facultad\BDD\datos varios(Proveedores).csv'
 EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
 */
 
---____________________________________________________________________________________________________
+--___________________________________________________________________________________________________________________________________________
 
 CREATE OR ALTER PROCEDURE Operaciones.CargaInquilinoPropietariosUF
     @RutaArchivo VARCHAR(255)
