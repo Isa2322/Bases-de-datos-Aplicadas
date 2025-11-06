@@ -199,13 +199,14 @@ GO
 
 --EXEC Negocio.SP_ObtenerTop5MesesGastosIngresos;
 --GO
--- =============================================
+-- ======================================================================================================================
 
 /*
     REPORTE 5:
     Obtenga los 3 (tres) propietarios con mayor morosidad. 
     Presente información de contacto y DNI de los propietarios para que la administración los pueda 
     contactar o remitir el trámite al estudio jurídico.
+    CON XML y SIN XML, ELEGIR CUAL USAR
 */
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte5_MayoresMorosos
@@ -218,7 +219,8 @@ BEGIN
 
     IF @fechaHasta IS NULL SET @fechaHasta = CAST(GETDATE() AS DATE);
 
-    WITH DeudaPorDetalle AS (
+    WITH DeudaPorDetalle AS 
+    (
         SELECT 
             de.id AS idDetalle,
             de.expensaId,
@@ -262,3 +264,67 @@ BEGIN
     ORDER BY MorosidadTotal DESC;
 END;
 GO
+
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte5_MayoresMorosos_XML
+    @idConsorcio INT,
+    @fechaDesde  DATE,
+    @fechaHasta  DATE = NULL
+    --solo admito q la fecha limite venga vacia
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @fechaHasta IS NULL SET @fechaHasta = CAST(GETDATE() AS DATE);
+
+    WITH DeudaPorDetalle AS 
+    (
+        SELECT 
+            de.expensaId,
+            de.idUnidadFuncional,
+            de.primerVencimiento,
+            CASE 
+                WHEN de.totalaPagar - ISNULL(de.pagosRecibidos,0) > 0 
+                THEN de.totalaPagar - ISNULL(de.pagosRecibidos,0)
+                ELSE 0 
+            END AS Deuda
+        FROM Negocio.DetalleExpensa AS de
+        WHERE (@fechaDesde IS NULL OR de.primerVencimiento >= @fechaDesde)
+          AND (@fechaHasta IS NULL OR de.primerVencimiento <= @fechaHasta)
+    ),
+    DeudaPorPersona AS 
+    (
+        SELECT
+            p.dni,
+            p.nombre,
+            p.apellido,
+            p.email,
+            p.telefono,
+            SUM(d.Deuda) AS MorosidadTotal
+        FROM DeudaPorDetalle d
+        INNER JOIN Consorcio.UnidadFuncional uf ON uf.id = d.idUnidadFuncional
+        INNER JOIN Negocio.Expensa e            ON e.id = d.expensaId
+        INNER JOIN Consorcio.Consorcio c        ON c.id = uf.consorcioId
+        -- titular por CBU/CVU registrado en la UF
+        INNER JOIN Consorcio.Persona p
+            ON (p.cbu = uf.CVU_CBU OR p.cvu = uf.CVU_CBU)
+        WHERE (@idConsorcio IS NULL OR c.id = @idConsorcio)
+        GROUP BY p.dni, p.nombre, p.apellido, p.email, p.telefono
+        HAVING SUM(d.Deuda) > 0.01
+    )
+    SELECT
+        (
+            SELECT TOP (3)
+                p.dni              AS [@dni],
+                p.nombre           AS [nombre],
+                p.apellido         AS [apellido],
+                p.email            AS [email],
+                p.telefono         AS [telefono],
+                p.MorosidadTotal   AS [morosidad]
+            FROM DeudaPorPersona p
+            ORDER BY p.MorosidadTotal DESC
+            FOR XML PATH('propietario'), ROOT('mayoresMorosos'), TYPE
+        ) AS XML_Reporte5;
+END
+GO
+
+-- ======================================================================================================================
