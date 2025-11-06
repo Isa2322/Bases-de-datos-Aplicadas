@@ -212,7 +212,8 @@ CREATE TABLE Negocio.Expensa(
     ingresosAdelantados DECIMAL(10,2),
     egresos DECIMAL(10,2),
     saldoCierre DECIMAL(10,2),
-    fechaPeriodo DATE NULL,
+    fechaPeriodoAnio INT NULL, 
+    fechaPeriodoMes INT NULL,  
     FOREIGN KEY (consorcio_id) REFERENCES Consorcio.Consorcio(id)
 );
 END
