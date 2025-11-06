@@ -62,23 +62,36 @@ GO
 use [Com5600G11];
 go 
 
-CREATE OR ALTER PROCEDURE Pago.ImportacionPago
+CREATE OR ALTER PROCEDURE Operaciones.ImportacionPago @RutaArchivo VARCHAR(255)
 	AS
 	BEGIN
 
-	SET NOCOUNT ON;
+	   IF CHARINDEX('''', @RutaArchivo) > 0 OR
+        CHARINDEX('--', @RutaArchivo) > 0 OR
+        CHARINDEX('/*', @RutaArchivo) > 0 OR 
+        CHARINDEX('*/', @RutaArchivo) > 0 OR
+        CHARINDEX(';', @RutaArchivo) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END
+    ELSE
+    BEGIN
+        DECLARE @SQL NVARCHAR(MAX);
+    SET @sql = '
+        BULK INSERT #PagosConsorcio
+        FROM ''' + REPLACE(@RutaArchivo, '''', '''''') + '''
+        WITH
+        (
+            FIELDTERMINATOR = '';'',
+            ROWTERMINATOR = ''\n'',
+            CODEPAGE = ''ACP'',
+            FIRSTROW = 2
+        );';
 
-	CREATE TABLE #PagosConsorcio (idPago int , fecha VARCHAR(10),CVU_CBU VARCHAR(22),valor varchar (12))
-
-	BULK INSERT #PagosConsorcio
-	FROM 'C:\consorcios\pagos_consorcios.csv'
-	WITH(
-		FIELDTERMINATOR = ',', -- Especifica el delimitador de campo (coma en un archivo CSV)
-		ROWTERMINATOR = '\n', -- Especifica el terminador de fila (salto de linea en un archivo CSV)
-		CODEPAGE = 'ACP',-- Especifica la pagina de codigos del archivo
-		FIRSTROW=2
-		)
+    EXEC(@sql);
 		
+CREATE TABLE #PagosConsorcio (idPago int , fecha VARCHAR(10),CVU_CBU VARCHAR(22),valor varchar (12))
 
 DELETE FROM #PagosConsorcio-- Elimino las filas nulas en caso de que se generen
 WHERE 
@@ -115,29 +128,12 @@ FROM #PagosConsorcio AS P;
    select fecha, valor,CVU_CBU,idFormaPago
    from #PagosConsorcio
    where idPago IS NOT NULL
---select *from pago.pago
+--SELECT *from pago.pago
 --SELECT* FROM #PagosConsorcio
 DROP TABLE #PagosConsorcio	
 END
 GO
 
-CREATE OR ALTER	PROCEDURE Pago.generadorFormasDePago 
-AS
-BEGIN
-	IF NOT EXISTS (
-	SELECT descripcion
-	FROM Pago.FormaDePago a
-	WHERE a.descripcion='Transferencia' OR a.descripcion='Debito automatico'
-					)
-					BEGIN
-						INSERT INTO Pago.FormaDePago(descripcion)
-							VALUES('Transferencia'),
-							('Debito automatico')
-					END
-
-END
-
-EXEC Pago.generadorFormasDePago
 EXEC Pago.ImportacionPago
 
 select * from Pago.FormaDePago
