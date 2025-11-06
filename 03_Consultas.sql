@@ -18,7 +18,7 @@ BEGIN
     DECLARE @IdConsorcio INT;
     DECLARE @IdExpensa INT;
 
-    -- 1. Buscar la Expensa y el ID del Consorcio usando los tres par�metros
+    -- 1. Buscar la Expensa y el ID del Consorcio usando los tres par�metros
     SELECT 
         @IdConsorcio = C.id,
         @IdExpensa = E.id
@@ -42,7 +42,7 @@ BEGIN
         RETURN;
     END;
 
-    -- 3. Inicia la l�gica de CTE
+    -- 3. Inicia la l�gica de CTE
     ; WITH EgresosCombinados AS ( 
         -- Ordinarios
         SELECT
@@ -201,3 +201,80 @@ GO
 --GO
 -- =============================================
 
+/*
+    REPORTE 5:
+    Obtenga los 3 (tres) propietarios con mayor morosidad. 
+    Presente información de contacto y DNI de los propietarios para que la administración los pueda 
+    contactar o remitir el trámite al estudio jurídico.
+*/
+
+CREATE OR ALTER PROCEDURE Reportes.sp_Reporte5_MayoresMorosos
+    @idConsorcio INT = NULL,
+    @fechaHasta DATE = NULL,
+    @fechaDesde DATE = NULL 
+AS
+BEGIN
+    SET NOCOUNT ON;
+    -- relleno el filtro de fecha limite si vino vacio
+    IF @fechaHasta IS NULL
+        SET @fechaHasta = GETDATE(); 
+        -- Fecha actual
+    SELECT TOP(3)
+        -- info a mostrar (nombre, ape, dni y datos de contacto)
+        Negocio.Persona.CUIL AS DNI,
+        Negocio.Persona.nombre,
+        Negocio.Persona.Apellido,
+        Negocio.Persona.emailPersonal,
+        Negocio.Persona.telefonoContacto,
+        -- calculo morosidad sumando todas sus expensas y restando todos sus pagos
+        SUM(Negocio.DetalleExpensa.total - ISNULL(PagosAplicados.TotalPagado, 0)) AS MorosidadTotal
+    FROM
+        Negocio.DetalleExpensa
+    JOIN
+        Negocio.Expensa ON Negocio.DetalleExpensa.idExpensa = Negocio.Expensa.id
+    JOIN
+        Negocio.TipoRel ON Negocio.DetalleExpensa.idUnidadFuncional = Negocio.TipoRel.idUnidadFuncional
+    JOIN
+        Negocio.Persona ON Negocio.TipoRel.idPersona = Negocio.Persona.id
+    LEFT JOIN
+        (
+            SELECT
+                Operaciones.PagoAplicado.idDetalleExpensa,
+                SUM(Operaciones.PagoAplicado.importeAplicado) AS TotalPagado
+            FROM
+                Operaciones.PagoAplicado
+            GROUP BY
+                Operaciones.PagoAplicado.idDetalleExpensa
+        ) AS PagosAplicados ON Negocio.DetalleExpensa.id = PagosAplicados.idDetalleExpensa
+
+    WHERE
+        -- condicion para ver si es el prop actual
+        Negocio.TipoRel.descripcion = 'Propietario'
+        AND Negocio.TipoRel.fechaFin IS NULL
+        -- aplico filtros
+        --q sea del mismo consorcio q se indico
+        AND (Negocio.Expensa.consorcioId = @idConsorcio OR @idConsorcio IS NULL)
+        --q sea menor a la fecha limite
+        AND Negocio.Expensa.fechaEmision <= @fechaHasta
+        -- q sea mayor a la fecha inicio
+        AND (Negocio.Expensa.fechaEmision >= @fechaDesde OR @fechaDesde IS NULL) 
+
+    GROUP BY
+        -- agrupo por persona
+        Negocio.Persona.id,
+        Negocio.Persona.CUIL,
+        Negocio.Persona.nombre,
+        Negocio.Persona.Apellido,
+        Negocio.Persona.emailPersonal,
+        Negocio.Persona.telefonoContacto
+
+    HAVING
+        -- solo muestro si la deuda existe mayor a cero
+        SUM(Negocio.DetalleExpensa.total - ISNULL(PagosAplicados.TotalPagado, 0)) > 0.01
+
+    ORDER BY
+        -- ordenamos de mayor a menor para que sea un top 3
+        MorosidadTotal DESC;
+
+END;
+GO
