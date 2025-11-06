@@ -48,8 +48,6 @@ filesystem, basta con que el resultado de la consulta sea XML.
 respecto a optimizacion de codigo y de tipos de datos.
 */
 
-/* Ejecutá TODO este bloque completo */
-
 USE master;
 GO
 -- Me fijo si la base existe y si es asi cierro todo lo q se este haciendo con ella y la dropeo
@@ -58,14 +56,14 @@ BEGIN
     -- saco a todos los q la esten usando
     ALTER DATABASE [Com5600G11] SET SINGLE_USER WITH ROLLBACK IMMEDIATE
     -- la dropeo
-    DROP DATABASE [Com5600G11];
+    DROP DATABASE [Com5600G11]
 END
 GO
 -- CREO LA BASE
-CREATE DATABASE [Com5600G11];
+CREATE DATABASE [Com5600G11]
 GO
 -- USO LA BASE DEL TP
-USE [Com5600G11];
+USE [Com5600G11]
 GO
 
 
