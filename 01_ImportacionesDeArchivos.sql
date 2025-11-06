@@ -550,7 +550,7 @@ END
 GO
 --____________________________________________________________________________________________________
 
-CREATE PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArchivoCSV VARCHAR(1000)
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARCHAR(1000)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -577,14 +577,14 @@ BEGIN
         DECLARE @sqlBulk VARCHAR(2000);
         SET @sqlBulk = '
             BULK INSERT #TempProveedoresGastoOriginal
-            FROM ''' + @rutaArchivoCSV + '''
+            FROM ''' + @rutaArch + '''
             WITH (
                 FIELDTERMINATOR = '';'',
                 ROWTERMINATOR = ''\n'',
                 FIRSTROW = 2, -- Asumo que tu CSV tiene encabezados
                 CODEPAGE = ''65001''
             )'
-        EXEC sys.sp_executesql @sqlBulk
+        EXEC (@sqlBulk)
 
         --procesamiento para extraer el detalle o poner lo q dice en la 3 columna
         INSERT INTO #TempProveedoresGastoProcesado 
@@ -617,22 +617,22 @@ BEGIN
             #TempProveedoresGastoOriginal
         
         --guardo en la tabla q corresponde usando la tabla procesada
-        UPDATE GastoOrdinario
+        UPDATE Negocio.GastoOrdinario
         SET
-            GastoOrdinario.nomEmpresaoPersona = T_Proc.nomEmpresaoPersona,
+            GastoOrdinario.nombreEmpresaoPersona = T_Proc.nomEmpresa,
             GastoOrdinario.detalle = T_Proc.detalle
         FROM
-            GastoOrdinario
+            Negocio.GastoOrdinario
         JOIN
-            Expensa ON GastoOrdinario.idExpensa = Expensa.id
+            Negocio.Expensa ON GastoOrdinario.idExpensa = Expensa.id
         JOIN
-            Consorcio ON Expensa.consorcioId = Consorcio.id
+            Consorcio.Consorcio ON Expensa.consorcio_id = Consorcio.id
         JOIN
             -- join con tabla procesada
             #TempProveedoresGastoProcesado AS T_Proc 
             -- Usamos el tipoGasto que extrajimos para el JOIN
-            ON GastoOrdinario.tipoGasto = T_Proc.tipoGasto
-            AND Consorcio.nombre = T_Proc.nombreConsorcio;
+            ON GastoOrdinario.tipoServicio = T_Proc.tipoGasto
+            AND Consorcio.nombre = T_Proc.nomConsorcio;
 
     END TRY
     BEGIN CATCH
@@ -640,11 +640,16 @@ BEGIN
         PRINT ERROR_MESSAGE();
     END CATCH
     -- limpio las temps
-    DROP TABLE #TempProveedoresGastoRaw;
+    DROP TABLE #TempProveedoresGastoOriginal;
     DROP TABLE #TempProveedoresGastoProcesado;
     SET NOCOUNT OFF;
 END;
 GO
+/*  PRUEBO SP
+DECLARE @rutaArchCSV VARCHAR(1000)
+SET @rutaArchCSV = 'C:\Users\camil\OneDrive\Escritorio\Facultad\BDD\datos varios(Proveedores).csv'
+EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
+*/
 
 --____________________________________________________________________________________________________
 
