@@ -116,6 +116,7 @@ GO
 
 -- servicios.servicios.json _______________________________________________________________________________
 
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarGastosMensuales
 ( 
     @ruta VARCHAR(500) 
@@ -123,70 +124,66 @@ CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarGastosMensuales
 AS
 BEGIN
     SET NOCOUNT ON;
-    -- Usamos TRY/CATCH para manejar posibles errores de unicidad del nroFactura
 
     DECLARE @sql NVARCHAR(MAX);
-
-    -- Tabla temporal (Se mantiene igual)
+    DECLARE @AnoActual INT = YEAR(GETDATE());
+    
+    -- 1. Tabla temporal (MODIFICADA: AÑADE MesNumerico INT)
     IF OBJECT_ID('tempdb..#TemporalDatosServicio') IS NOT NULL DROP TABLE #TemporalDatosServicio;
-    
+    
     CREATE TABLE #TemporalDatosServicio (
         NombreConsorcio VARCHAR(100),
         Mes VARCHAR(20),
         TipoGastoBruto VARCHAR(50), 
-        Importe DECIMAL(18, 2)
+        Importe DECIMAL(18, 2),
+        MesNumerico INT
     );
 
 
--- verificar ruta
-    IF CHARINDEX('''', @ruta) > 0 OR
-        CHARINDEX('--', @ruta) > 0 OR
-        CHARINDEX('/*', @ruta) > 0 OR 
-        CHARINDEX('*/', @ruta) > 0 OR
-        CHARINDEX(';', @ruta) > 0
-    BEGIN
-        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
-        RETURN;
-    END
-    ELSE
-    BEGIN
-        -- Bloque de carga de datos (Bulk Insert)
-        SET @sql = N'
-        INSERT INTO #TemporalDatosServicio (NombreConsorcio, Mes, TipoGastoBruto, Importe)
-        SELECT
-            J.NombreConsorcio,
-            J.Mes,
-            T.TipoGastoBruto,
-            Operaciones.LimpiarNumero(T.ImporteBruto) 
-        FROM OPENROWSET (BULK ''' + @ruta + ''', SINGLE_CLOB) AS jr
-        CROSS APPLY OPENJSON(BulkColumn)
-        WITH (
-            NombreConsorcio VARCHAR(100) ''$."Nombre del consorcio"'',
-            Mes             VARCHAR(20)  ''$.Mes'',
-            BANCARIOS       VARCHAR(50)  ''$.BANCARIOS'',
-            LIMPIEZA        VARCHAR(50)  ''$.LIMPIEZA'',
-            ADMINISTRACION  VARCHAR(50)  ''$.ADMINISTRACION'',
-            SEGUROS         VARCHAR(50)  ''$.SEGUROS'',
-            GASTOS_GRALES   VARCHAR(50)  ''$."GASTOS GENERALES"'',
-            AGUA            VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Agua"'',
-            LUZ             VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Luz"''
-        ) AS J
-        CROSS APPLY (VALUES 
-            (''BANCARIOS'', J.BANCARIOS),
-            (''LIMPIEZA'', J.LIMPIEZA),
-            (''ADMINISTRACION'', J.ADMINISTRACION),
-            (''SEGUROS'', J.SEGUROS),
-            (''GASTOS GENERALES'', J.GASTOS_GRALES),
-            (''SERVICIOS PUBLICOS-Agua'', J.AGUA), 
-            (''SERVICIOS PUBLICOS-Luz'', J.LUZ)     
-        ) AS T (TipoGastoBruto, ImporteBruto)
-        WHERE Operaciones.LimpiarNumero(T.ImporteBruto) IS NOT NULL 
-            AND Operaciones.LimpiarNumero(T.ImporteBruto) > 0;';
-        EXEC sp_executesql @sql
-    end
-    
+-- Bloque de verificación de ruta y carga de datos
+    IF CHARINDEX('''', @ruta) > 0 OR
+        CHARINDEX('--', @ruta) > 0 OR
+        CHARINDEX('/*', @ruta) > 0 OR 
+        CHARINDEX('*/', @ruta) > 0 OR
+        CHARINDEX(';', @ruta) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END
+    ELSE
+    BEGIN
+
+        SET @sql = N'
+        INSERT INTO #TemporalDatosServicio (NombreConsorcio, Mes, TipoGastoBruto, Importe, MesNumerico)
+        SELECT
+            J.NombreConsorcio, J.Mes, T.TipoGastoBruto, Operaciones.LimpiarNumero(T.ImporteBruto),
+            CASE LTRIM(RTRIM(LOWER(J.Mes)))
+                WHEN ''enero'' THEN 1 WHEN ''febrero'' THEN 2 WHEN ''marzo'' THEN 3
+                WHEN ''abril'' THEN 4 WHEN ''mayo'' THEN 5 WHEN ''junio'' THEN 6
+                WHEN ''julio'' THEN 7 WHEN ''agosto'' THEN 8 WHEN ''septiembre'' THEN 9
+                WHEN ''octubre'' THEN 10 WHEN ''noviembre'' THEN 11 WHEN ''diciembre'' THEN 12
+                ELSE MONTH(GETDATE()) END
+        FROM OPENROWSET (BULK ''' + @ruta + ''', SINGLE_CLOB) AS jr
+        CROSS APPLY OPENJSON(BulkColumn)
+        WITH (
+            NombreConsorcio VARCHAR(100) ''$."Nombre del consorcio"'', Mes  VARCHAR(20)  ''$.Mes'',
+            BANCARIOS  VARCHAR(50)  ''$.BANCARIOS'', LIMPIEZA  VARCHAR(50)  ''$.LIMPIEZA'',
+            ADMINISTRACION  VARCHAR(50)  ''$.ADMINISTRACION'', SEGUROS  VARCHAR(50)  ''$.SEGUROS'',
+            GASTOS_GRALES  VARCHAR(50)  ''$."GASTOS GENERALES"'', AGUA  VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Agua"'',
+            LUZ  VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Luz"''
+        ) AS J
+        CROSS APPLY (VALUES 
+            (''BANCARIOS'', J.BANCARIOS), (''LIMPIEZA'', J.LIMPIEZA), (''ADMINISTRACION'', J.ADMINISTRACION),
+            (''SEGUROS'', J.SEGUROS), (''GASTOS GENERALES'', J.GASTOS_GRALES),
+            (''SERVICIOS PUBLICOS-Agua'', J.AGUA), (''SERVICIOS PUBLICOS-Luz'', J.LUZ)     
+        ) AS T (TipoGastoBruto, ImporteBruto)
+        WHERE Operaciones.LimpiarNumero(T.ImporteBruto) IS NOT NULL 
+            AND Operaciones.LimpiarNumero(T.ImporteBruto) > 0;';
+        EXEC sp_executesql @sql
+    end
+    
     -- Bloque de Inserción
-    BEGIN TRY
+    BEGIN TRY
         INSERT INTO Negocio.GastoOrdinario (
             idExpensa, 
             nombreEmpresaoPersona,
@@ -194,62 +191,43 @@ BEGIN
             importeTotal, 
             detalle, 
             tipoServicio,
-            nroFactura
+            nroFactura
         )
         SELECT
             E.id AS idExpensa, 
             S.TipoGastoBruto AS nombreEmpresaoPersona,
         
-            -- fechaEmision
-            Operaciones.ObtenerDiaHabil(
-                YEAR(GETDATE()),
-                CASE LTRIM(RTRIM(LOWER(S.Mes)))
-                    WHEN 'enero' THEN 1 WHEN 'febrero' THEN 2 WHEN 'marzo' THEN 3
-                    WHEN 'abril' THEN 4 WHEN 'mayo' THEN 5 WHEN 'junio' THEN 6
-                    WHEN 'julio' THEN 7 WHEN 'agosto' THEN 8 WHEN 'septiembre' THEN 9
-                    WHEN 'octubre' THEN 10 WHEN 'noviembre' THEN 11 WHEN 'diciembre' THEN 12
-                    ELSE MONTH(GETDATE()) 
-                END,
-                5 -- Queremos el 5to día hábil
+            -- Se usa una fecha simplificada para la emisión (Día 1 del mes y Año actual)
+            DATEFROMPARTS(
+                @AnoActual,
+                S.MesNumerico,
+                1 -- Día 1
             ) AS fechaEmision, 
             S.Importe AS importeTotal,
             null AS detalle,
             S.TipoGastoBruto AS tipoServicio,
 
-            -- Generación de nroFactura (10 dígitos en total: 4 + 4 + 2)
-            RIGHT('0000' + CAST(E.id AS VARCHAR(4)), 4) + -- idExpensa (4 dígitos, máx. 9999)
-            RIGHT(
-                CAST((YEAR(GETDATE()) * 100) + 
-                (
-                    CASE LTRIM(RTRIM(LOWER(S.Mes)))
-                        WHEN 'enero' THEN 1 WHEN 'febrero' THEN 2 WHEN 'marzo' THEN 3
-                        WHEN 'abril' THEN 4 WHEN 'mayo' THEN 5 WHEN 'junio' THEN 6
-                        WHEN 'julio' THEN 7 WHEN 'agosto' THEN 8 WHEN 'septiembre' THEN 9
-                        WHEN 'octubre' THEN 10 WHEN 'noviembre' THEN 11 WHEN 'diciembre' THEN 12
-                        ELSE MONTH(GETDATE()) 
-                    END
-                ) AS VARCHAR(6)) -- Se convierte el número YYYYMM (6 dígitos) a texto
-            , 4) + -- Se toma el YYMM (4 dígitos) de la 
-            RIGHT('00' + CAST(ABS(CHECKSUM(S.TipoGastoBruto)) % 100 AS VARCHAR(2)), 2) -- Hash del Tipo de Gasto (2 dígitos)
-            AS nroFactura
+            -- Generación de nroFactura (10 dígitos: 4 + 4 + 2)
+            RIGHT('0000' + CAST(E.id AS VARCHAR(4)), 4) + -- idExpensa (4 dígitos)
+            RIGHT(
+                CAST((@AnoActual * 100) + 
+                (
+                    S.MesNumerico
+                ) AS VARCHAR(6))
+            , 4) + -- YYMM (4 dígitos)
+            RIGHT('00' + CAST(ABS(CHECKSUM(S.TipoGastoBruto)) % 100 AS VARCHAR(2)), 2) -- Hash (2 dígitos)
+            AS nroFactura
 
         FROM #TemporalDatosServicio AS S
             CROSS APPLY (
-            SELECT TOP 1 E.id, CM.nombre 
+            SELECT TOP 1 E.id, CM.nombre
             FROM Negocio.Expensa AS E
             INNER JOIN Consorcio.Consorcio AS CM ON E.consorcio_id = CM.id
             WHERE CM.nombre = S.NombreConsorcio 
-            AND E.fechaPeriodo = Operaciones.ObtenerDiaHabil(
-                YEAR(GETDATE()),
-                CASE LTRIM(RTRIM(LOWER(S.Mes)))
-                    WHEN 'enero' THEN 1 WHEN 'febrero' THEN 2 WHEN 'marzo' THEN 3
-                    WHEN 'abril' THEN 4 WHEN 'mayo' THEN 5 WHEN 'junio' THEN 6
-                    WHEN 'julio' THEN 7 WHEN 'agosto' THEN 8 WHEN 'septiembre' THEN 9
-                    WHEN 'octubre' THEN 10 WHEN 'noviembre' THEN 11 WHEN 'diciembre' THEN 12
-                    ELSE MONTH(GETDATE()) 
-                END,
-                5 -- Queremos el 5to día hábil
-            )
+            
+            -- FILTRO ADAPTADO A COLUMNAS INT (Ahora usa S.MesNumerico)
+            AND E.fechaPeriodoAnio = @AnoActual
+            AND E.fechaPeriodoMes = S.MesNumerico 
             ) AS E (id, NombreConsorcio_FK)
         
             -- evitar duplicado por Tipo de Gasto/Expensa
@@ -260,25 +238,22 @@ BEGIN
                 AND GO.tipoServicio = S.TipoGastoBruto
             )
             AND E.id IS NOT NULL;  
-    END TRY
-    BEGIN CATCH
-        -- Manejar error de UNIQUE Constraint Violation (2627)!!!!!
-        IF ERROR_NUMBER() = 2627 
-        BEGIN
-             RAISERROR('Error: Se encontró un número de factura duplicado al generar datos. La inserción falló parcialmente.', 16, 1);
-        END
-        ELSE
-        BEGIN
-             THROW; -- Lanzar cualquier otro error de SQL
-        END
-    END CATCH
+    END TRY
+    BEGIN CATCH
+        IF ERROR_NUMBER() = 2627 
+        BEGIN
+             RAISERROR('Error: Se encontró un número de factura duplicado al generar datos. La inserción falló parcialmente.', 16, 1);
+        END
+        ELSE
+        BEGIN
+             THROW;
+        END
+    END CATCH
     
-    -- eliminar la tabla temporal
     DROP TABLE #TemporalDatosServicio;
 
 END
 GO
-
 
 -- IMPORTACION DE PERSONAS ___________________________________________________________________________________________________
 
