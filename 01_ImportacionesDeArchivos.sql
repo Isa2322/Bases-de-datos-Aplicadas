@@ -252,8 +252,6 @@ BEGIN
     -- eliminar la tabla temporal
     DROP TABLE #TemporalDatosServicio;
 
-    */ 
-
 END
 GO
 
