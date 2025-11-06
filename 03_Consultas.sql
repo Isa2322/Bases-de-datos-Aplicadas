@@ -252,7 +252,7 @@ BEGIN
     INNER JOIN Consorcio.Consorcio AS c
         ON c.id = uf.consorcioId
     -- propietario se vincula por el CBU/CVU de la UF con la persona
-    INNER JOIN Consorcio.Persona AS p
+    INNER JOIN Consorcio. AS p
         ON (p.cbu = uf.CVU_CBU OR p.cvu = uf.CVU_CBU)
     WHERE
         (@idConsorcio IS NULL OR c.id = @idConsorcio)

@@ -379,35 +379,10 @@ END
 
     PRINT 'Iniciando importaci�n de: ' + @RutaArchivo;
 
-
----------------------------- ESTO NO VA !!!!!!!------------------------
--- Se eliminan las tablas si existen
-    DROP TABLE IF EXISTS Persona.CuentaBancaria;
-    DROP TABLE IF EXISTS Persona.Persona;
-
--- Se crean de nuevo
-    CREATE TABLE Persona.Persona (
-        ID INT IDENTITY(1,1) PRIMARY KEY, 
-        DNI BIGINT,
-        Nombre VARCHAR(30),
-        Apellido VARCHAR(30),
-        CBU VARCHAR(22),
-        Telefono BIGINT,
-        Email NVARCHAR(60),
-        Tipo VARCHAR(20)
-    );
-    CREATE TABLE Persona.CuentaBancaria (
-        CBU VARCHAR(22) PRIMARY KEY,
-        Banco VARCHAR(100) NULL,
-        TitularId INT NULL,
-        CONSTRAINT FK_Cuenta_Titular
-        FOREIGN KEY (TitularId) REFERENCES Persona.Persona(ID)
-    );
-
 -- Tabla temporal para importacion
-    DROP TABLE IF EXISTS TemporalPersonas;
+    DROP TABLE IF EXISTS #TemporalPersonas;
 
-    CREATE TABLE TemporalPersonas (
+    CREATE TABLE #TemporalPersonas (
         Nombre VARCHAR(30),
         Apellido VARCHAR(30),
         DNI BIGINT,
