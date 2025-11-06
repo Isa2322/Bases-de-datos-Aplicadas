@@ -163,8 +163,7 @@ BEGIN
         dni VARCHAR(20) NOT NULL UNIQUE,
         email VARCHAR(150),
         telefono VARCHAR(50),
-        cbu VARCHAR(22),
-        cvu VARCHAR(22),
+        cbu_cvu VARCHAR(22),
         idTipoRol INT NOT NULL,
         CONSTRAINT FK_Consorcio_TipoRol FOREIGN KEY (idTipoRol) 
             REFERENCES Consorcio.TipoRol(idTipoRol)
