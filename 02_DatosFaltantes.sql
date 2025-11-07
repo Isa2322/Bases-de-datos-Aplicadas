@@ -52,7 +52,7 @@ BEGIN
     
     PRINT N'Insertando/Verificando datos semilla en Pago.FormaDePago...';
 
-    -- Transferencia Bancaria (m�s com�n para el CVU/CBU)
+    -- Transferencia Bancaria (mas comun para el CVU/CBU)
     IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Transferencia Bancaria')
     BEGIN
         INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
@@ -70,7 +70,7 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Mercado Pago/Billetera')
     BEGIN
         INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
-        VALUES ('Mercado Pago/Billetera', 'ID de Transacci�n');
+        VALUES ('Mercado Pago/Billetera', 'ID de Transaccion');
     END
 
     PRINT N'Carga de datos de Formas de Pago finalizada.';
@@ -78,8 +78,6 @@ BEGIN
 END
 GO
 
-EXEC SP_CrearYcargar_FormasDePago_Semilla;
-GO
 
 -- ============================================================================
 --Rellenar tabla COCHERA
