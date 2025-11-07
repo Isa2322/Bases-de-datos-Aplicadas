@@ -380,7 +380,6 @@ BEGIN
 END
 GO
 
-
 -- ===============================================================================================================
 -- IMPORTACION DE PERSONAS 
 
@@ -568,15 +567,9 @@ BEGIN
     SET NOCOUNT OFF;
 END;
 GO
-
-/*  PRUEBO SP
-EXEC Operaciones.sp_ImportarDatosConsorcios @rutaArch = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\consorcios\datos varios(Consorcios).csv'
-SELECT * FROM Consorcio.Consorcio
-*/
-
 --==================================================================================================================
 --IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios en CSV)
-
+--Antes de ejecutar esto tiene que estar cargada la tabla de GastoOrdinario
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores
     @rutaArch VARCHAR(1000)
 AS
@@ -615,9 +608,6 @@ BEGIN
     );
 
     BEGIN TRY
-        ----------------------------------------------------------
-        -- BULK INSERT
-        ----------------------------------------------------------
         DECLARE @sqlBulk NVARCHAR(MAX) = N'
             BULK INSERT #TempProveedoresGastoOriginal
             FROM ''' + @rutaArch + N'''
@@ -639,10 +629,7 @@ BEGIN
             RETURN;
         END
 
-        ----------------------------------------------------------
-        -- NORMALIZACIÓN (trim + remover CR y BOM)
-        ----------------------------------------------------------
-        -- quitar CR (CHAR(13)) final que puede quedar por \r\n
+		--normalizar
         UPDATE #TempProveedoresGastoOriginal
         SET
             tipoGasto          = REPLACE(tipoGasto, CHAR(13), ''),
@@ -650,7 +637,7 @@ BEGIN
             detalleAlternativo = REPLACE(detalleAlternativo, CHAR(13), ''),
             nomConsorcio       = REPLACE(nomConsorcio, CHAR(13), '');
 
-        -- trim + quitar posible BOM en la primer columna si existiera
+        -- cosas de formato
         UPDATE #TempProveedoresGastoOriginal
         SET
             tipoGasto    = LTRIM(RTRIM(REPLACE(tipoGasto, NCHAR(65279), ''))),  -- NCHAR(65279) = BOM UTF-8
@@ -658,9 +645,7 @@ BEGIN
             detalleAlternativo = LTRIM(RTRIM(detalleAlternativo)),
             nomConsorcio = LTRIM(RTRIM(nomConsorcio));
 
-        ----------------------------------------------------------
-        -- PROCESAR (separar empresa/detalle)
-        ----------------------------------------------------------
+        --se procesa la tabla
         INSERT INTO #TempProveedoresGastoProcesado (tipoGasto, nomEmpresa, detalle, nomConsorcio)
         SELECT 
             LTRIM(RTRIM(tipoGasto)) AS tipoGasto,
@@ -706,19 +691,12 @@ GO
 
 /*  PRUEBO SP
 EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\consorcios\datos varios(Proveedores).csv'
-SELECT go.idGasto, c.nombre AS Consorcio, go.tipoServicio, go.nombreEmpresaoPersona, go.detalle
-FROM Negocio.GastoOrdinario go
-JOIN Negocio.Expensa e ON e.id = go.idExpensa
-JOIN Consorcio.Consorcio c ON c.id = e.consorcio_id
-WHERE e.id = 9001
-ORDER BY go.idGasto;
-
+SELECT * FROM Negocio.GastoOrdinario
 */
-
-
 
 --===============================================================================================================
 -- IMPORTACION DIRECTAMENTE DESDE EL EXCEL PARA CONSORCIOS
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios_excel
     @rutaExcel VARCHAR(1000)
 AS
@@ -768,12 +746,12 @@ BEGIN
     UPDATE c
     SET 
         c.direccion = ISNULL(t.direccion, c.direccion),
-        c.superficieTotal = ISNULL(t.superficieTotal, c.superficieTotal)
+        c.metrosCuadradosTotal = ISNULL(t.superficieTotal, c.metrosCuadradosTotal)
     FROM Consorcio.Consorcio c
     INNER JOIN #TempConsorcios t ON c.nombre = t.nombre;
 
     -- inserto los nuevos consorcios que no existan todavía
-    INSERT INTO Consorcio.Consorcio (nombre, direccion, superficieTotal)
+    INSERT INTO Consorcio.Consorcio (nombre, direccion, metrosCuadradosTotal)
     SELECT 
         t.nombre, 
         t.direccion, 
@@ -789,7 +767,6 @@ BEGIN
 END;
 GO
 
-EXEC Operaciones.sp_ImportarDatosConsorcios_excel @rutaExcel = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\consorcios\datos varios.xlsl'
 --===============================================================================================================
 -- IMPORTACION DIRECTAMENTE DESDE EL EXCEL PARA PROVEEDORES
 
@@ -867,15 +844,15 @@ BEGIN
     FROM #TempProveedoresGastoOriginal;
 
     -- actualizo los gastos existentes
-    UPDATE go
+    UPDATE g
     SET 
-        go.nombreEmpresaoPersona = p.nomEmpresa,
-        go.detalle = p.detalle
-    FROM Negocio.GastoOrdinario go
-    INNER JOIN Negocio.Expensa e ON e.id = go.idExpensa
+        g.nombreEmpresaoPersona = p.nomEmpresa,
+        g.detalle = p.detalle
+    FROM Negocio.GastoOrdinario AS g
+    INNER JOIN Negocio.Expensa e ON e.id = g.idExpensa
     INNER JOIN Consorcio.Consorcio c ON c.id = e.consorcio_id
     INNER JOIN #TempProveedoresGastoProcesado p
-        ON p.tipoGasto = go.tipoServicio
+        ON p.tipoGasto = g.tipoServicio
        AND p.nomConsorcio = c.nombre;
 
     DROP TABLE #TempProveedoresGastoOriginal;
@@ -979,8 +956,7 @@ BEGIN
 END
 GO
 
---_______________________________________________________________________________________________________________________
-
+--===============================================================================================================
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarUFporConsorcio
     @RutaArchivo VARCHAR(500)
 AS
