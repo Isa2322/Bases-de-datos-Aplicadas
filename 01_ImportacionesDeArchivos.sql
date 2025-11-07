@@ -557,7 +557,7 @@ EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
 
 --_____________________________________________________________________________________________________________________________________________________________
 --IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios)____________________________________________________________________________________________________
-CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARCHAR(1000)
+--CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARCHAR(1000)
 --==================================================================================================================
 --IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios en CSV)
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios
@@ -735,7 +735,7 @@ BEGIN
             g.detalle               = p.detalle
         FROM Negocio.GastoOrdinario AS g
         JOIN Negocio.Expensa       e  ON e.id = g.idExpensa
-        JOIN Consorcio.Consorcio   c  ON c.id = e.consorcio_id
+        JOIN Consorcio.Consorcio   c  ON c.id = e.consorcioId
         JOIN #TempProveedoresGastoProcesado p
              ON p.tipoGasto    = LTRIM(RTRIM(g.tipoServicio))
             AND p.nomConsorcio = LTRIM(RTRIM(c.nombre));
@@ -917,7 +917,7 @@ BEGIN
         g.detalle = p.detalle
     FROM Negocio.GastoOrdinario AS g
     INNER JOIN Negocio.Expensa e ON e.id = g.idExpensa
-    INNER JOIN Consorcio.Consorcio c ON c.id = e.consorcio_id
+    INNER JOIN Consorcio.Consorcio c ON c.id = e.consorcioId
     INNER JOIN #TempProveedoresGastoProcesado p
         ON p.tipoGasto = g.tipoServicio
        AND p.nomConsorcio = c.nombre;
