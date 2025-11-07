@@ -1,5 +1,9 @@
 -- CREACION DE INDICES  separados por esquema_______________________________________________________________________________
 
+-- USO LA BASE DEL TP
+USE [Com5600G11]
+GO
+
 -- Búsquedas frecuentes por nombre (joins desde staging/archivos)
 IF NOT EXISTS (SELECT 1 FROM sys.indexes 
                WHERE name = 'IX_Consorcio_nombre' 
@@ -40,7 +44,7 @@ BEGIN
                      AND object_id = OBJECT_ID('Consorcio.Persona'))
     BEGIN
         CREATE NONCLUSTERED INDEX IX_Persona_CBU
-            ON Consorcio.Persona (cbu)
+            ON Consorcio.Persona (CVU_CBU)
             INCLUDE (dni, nombre, apellido, email, telefono);
     END;
 
@@ -49,7 +53,7 @@ BEGIN
                      AND object_id = OBJECT_ID('Consorcio.Persona'))
     BEGIN
         CREATE NONCLUSTERED INDEX IX_Persona_CVU
-            ON Consorcio.Persona (cvu)
+            ON Consorcio.Persona (CVU_CBU)
             INCLUDE (dni, nombre, apellido, email, telefono);
     END;
 END

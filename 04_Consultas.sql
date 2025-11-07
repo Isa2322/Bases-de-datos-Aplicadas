@@ -1,4 +1,7 @@
 -- =============================================
+USE [Com5600G11]; 
+GO
+
 
 -- 1
 IF OBJECT_ID('sp_analizar_flujo_egresos_semanal', 'P') IS NOT NULL
