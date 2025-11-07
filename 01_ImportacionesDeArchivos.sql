@@ -64,7 +64,7 @@ END
 GO
 
 --Funcion para cargar el archivo pagos_consorcios.csv
-CREATE OR ALTER PROCEDURE Operaciones.ImportacionPago @RutaArchivo VARCHAR(255)
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportacionPago @RutaArchivo VARCHAR(255)
 AS
 BEGIN
 
@@ -661,7 +661,7 @@ EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
 
 --___________________________________________________________________________________________________________________________________________
 
-CREATE OR ALTER PROCEDURE CargaInquilinoPropietariosUF
+CREATE OR ALTER PROCEDURE Operaciones.sp_CargaInquilinoPropietariosUF
     @RutaArchivo VARCHAR(255)
 AS
 BEGIN
