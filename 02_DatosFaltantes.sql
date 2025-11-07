@@ -14,6 +14,32 @@ Pastori, Ximena - 42300128*/
 USE [Com5600G11]; 
 GO
 
+-- TIPO DE ROL
+
+CREATE OR ALTER PROCEDURE Operaciones.CargaTiposRol
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Inserta el tipo "Inquilino" si no existe
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.TipoRol WHERE nombre = 'Inquilino')
+    BEGIN
+        INSERT INTO Consorcio.TipoRol (nombre, descripcion)
+        VALUES ('Inquilino', 'Persona que alquila una unidad funcional dentro del consorcio.');
+    END
+
+    -- Inserta el tipo "Propietario" si no existe
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.TipoRol WHERE nombre = 'Propietario')
+    BEGIN
+        INSERT INTO Consorcio.TipoRol (nombre, descripcion)
+        VALUES ('Propietario', 'Dueño de una o más unidades funcionales dentro del consorcio.');
+    END
+
+    PRINT N'Carga de datos de Tipos de Rol finalizada.';
+END
+GO
+
+
 -- FORMAS DE PAGO
 
 IF OBJECT_ID('SP_CrearYcargar_FormasDePago_Semilla', 'P') IS NOT NULL
@@ -88,7 +114,7 @@ BEGIN
 
         -- Número actual de cocheras en este consorcio
         SET @maxNum = ISNULL(
-            (SELECT MAX(numero) FROM Consorcio.Cochera c
+            (SELECT MAX(10) FROM Consorcio.Cochera c
              INNER JOIN Consorcio.UnidadFuncional uf ON uf.id = c.unidadFuncionalId
              WHERE uf.consorcioId = @idConsorcio),
         0);
@@ -144,7 +170,7 @@ BEGIN
         );
 
         SET @maxNum = ISNULL(
-            (SELECT MAX(numero) FROM Consorcio.Baulera b
+            (SELECT MAX(10) FROM Consorcio.Baulera b
              INNER JOIN Consorcio.UnidadFuncional uf ON uf.id = b.unidadFuncionalId
              WHERE uf.consorcioId = @idConsorcio),
         0);
@@ -170,3 +196,67 @@ BEGIN
 END;
 GO
 
+-- PAGO APLICADO
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_AplicarPagosACuentas
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @FilasAfectadas INT = 0;
+
+    -- Insertar en Pago.PagoAplicado relacionando el pago con su detalle de expensa
+    INSERT INTO Pago.PagoAplicado (
+        idPago, 
+        idDetalleExpensa, 
+        importeAplicado
+    )
+    SELECT
+        P.id AS idPago,
+        DE.id AS idDetalleExpensa,
+        P.importe AS importeAplicado
+    FROM Pago.Pago AS P -- 1. Pagos realizados
+    
+    -- 2. Encontrar la Unidad Funcional (UF) dueña del CVU/CBU de origen del pago
+    INNER JOIN Consorcio.UnidadFuncional AS UF 
+        ON P.cbuCuentaOrigen = UF.CVU_CBU 
+        
+    -- 3. Encontrar el Detalle de Expensa (DE) correspondiente a esa UF
+    INNER JOIN Negocio.DetalleExpensa AS DE
+        ON DE.idUnidadFuncional = UF.id
+        
+    -- 4. Encontrar la Expensa (E) para verificar el período
+    INNER JOIN Negocio.Expensa AS E
+        ON DE.expensaId = E.id
+    
+    WHERE 
+        -- LÓGICA DE APLICACIÓN DEL PERÍODO (Mes de Pago = Mes de Vencimiento de Expensa)
+        -- Si el pago se hace en el mes M, se aplica a la expensa generada para el periodo M-1.
+        E.fechaPeriodoAnio = 
+            CASE 
+                -- Si el pago se hace en enero, se aplica a la expensa de diciembre del año anterior.
+                WHEN MONTH(P.fecha) = 1 THEN YEAR(P.fecha) - 1 
+                ELSE YEAR(P.fecha)
+            END
+        AND 
+        E.fechaPeriodoMes = 
+            CASE 
+                -- Si el pago se hace en enero (1), el mes del periodo de expensa es diciembre (12).
+                WHEN MONTH(P.fecha) = 1 THEN 12 
+                ELSE MONTH(P.fecha) - 1 -- Si es otro mes, se aplica al mes anterior.
+            END
+            
+        -- GUARDRAIL: Solo aplica pagos que aún NO hayan sido registrados en PagoAplicado.
+        AND NOT EXISTS (
+            SELECT 1 
+            FROM Pago.PagoAplicado AS PA 
+            WHERE PA.idPago = P.id
+        );
+
+    SET @FilasAfectadas = @@ROWCOUNT;
+    
+    PRINT 'Aplicación de Pagos completada.';
+    PRINT 'Total de nuevos pagos aplicados a DetalleExpensa: ' + CAST(@FilasAfectadas AS VARCHAR);
+
+END
+GO

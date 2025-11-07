@@ -473,17 +473,10 @@ END
         END AS idTipoRol
     FROM #TemporalPersonas tp
     WHERE NOT EXISTS (
-        SELECT 1 FROM Consorcio.Persona p WHERE p.DNI = tp.DNI
+        SELECT 1 FROM Consorcio.Persona p 
+        WHERE p.DNI = tp.DNI
+        AND p.CVU_CBU = tp.CVU_CBU
     );
-
-    -- join de persona y cuenta bancaria por CBU para insertar con la FK
-   INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular)
-    SELECT DISTINCT 
-        LTRIM(RTRIM(it.CVU_CBU)) AS cbu,
-        p.nombre
-    FROM #TemporalPersonas it
-    JOIN Consorcio.Persona p ON LTRIM(RTRIM(p.CVU_CBU)) = LTRIM(RTRIM(it.CVU_CBU))
-    WHERE it.CVU_CBU IS NOT NULL AND it.CVU_CBU <> '';
 
 
     DROP TABLE IF EXISTS dbo.#TemporalPersonas
@@ -491,6 +484,80 @@ END;
 GO
 
 
+--_____________________________________________________________________________________________________________________________________
+--IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)____________________________________________________________________________
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
+AS
+BEGIN
+    --esto es para verificar q la ruta venga bien escrita
+       IF CHARINDEX('''', @rutaArch) > 0 OR
+       CHARINDEX('--', @rutaArch) > 0 OR
+       CHARINDEX('/*', @rutaArch) > 0 OR 
+       CHARINDEX('*/', @rutaArch) > 0 OR
+       CHARINDEX(';', @rutaArch) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END
+	--armo una temporal para guardar los datos
+	CREATE TABLE #TempConsorciosBulk 
+	( 
+		consorcioCSV VARCHAR(100),
+        nombreCSV VARCHAR(100),
+        direccionCSV VARCHAR(200),
+		cantUnidadesCSV INT,
+        superficieTotalCSV DECIMAL(10, 2)
+    );
+
+	--sql dinamico para encontrar la ruta
+	DECLARE @sqlBulk VARCHAR(1000)
+
+	SET @sqlBulk = 
+			'
+            BULK INSERT #TempConsorciosBulk
+            FROM ''' + @rutaArch + '''
+            WITH (
+                FIELDTERMINATOR = '';'',
+                ROWTERMINATOR = ''\n'',
+                FIRSTROW = 2,
+                CODEPAGE = ''65001''   
+            )
+			'
+    EXEC(@sqlBulk)
+	--Dsps de esto ya tendria todo insertado en la tabla temporal
+	--Ahora tengo q pasar las cosas a la tabla real
+	--Esta actualizacion se hace comparando con el nombre, si no encuentra una coincidencia del nombre en la tabla considera q tenes un consorcio nuevo y lo inserta
+	UPDATE Consorcio.Consorcio
+    SET direccion = Fuente.direccionCSV, metrosCuadradosTotal = Fuente.superficieTotalCSV
+    FROM Consorcio.Consorcio AS Final INNER JOIN #TempConsorciosBulk AS Fuente
+    ON Final.nombre = Fuente.nombreCSV
+    INSERT INTO Consorcio.Consorcio 
+	(
+         nombre,
+         direccion,
+         metrosCuadradosTotal
+    )
+    SELECT Fuente.nombreCSV, Fuente.direccionCSV, Fuente.superficieTotalCSV
+    FROM #TempConsorciosBulk AS Fuente
+	WHERE NOT EXISTS 
+			(
+                SELECT 1
+                FROM Consorcio.Consorcio AS Final
+                WHERE Final.nombre = Fuente.nombreCSV AND Final.direccion = Fuente.direccionCSV
+            ) --basicamente aca se fija q para actualizar ya exista un consorcio con el mismo nombre y direccion y sino inserta uno nuevo
+
+END
+GO
+
+/*  PRUEBO SP
+DECLARE @rutaArchCSV VARCHAR(1000)
+SET @rutaArchCSV = 'C:\Users\camil\OneDrive\Escritorio\Facultad\BDD\datos varios(Consorcios).csv'
+EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
+*/
+
+--_____________________________________________________________________________________________________________________________________________________________
+--IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios)____________________________________________________________________________________________________
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARCHAR(1000)
 --==================================================================================================================
 --IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios en CSV)
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios
