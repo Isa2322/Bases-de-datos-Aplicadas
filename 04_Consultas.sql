@@ -1,3 +1,7 @@
+-- =============================================
+USE [Com5600G11]; 
+GO
+
 /*
     REPORTE 1: 
     Se desea analizar el flujo de caja en forma semanal. 
