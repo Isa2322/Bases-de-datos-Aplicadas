@@ -48,39 +48,25 @@ filesystem, basta con que el resultado de la consulta sea XML.
 respecto a optimizacion de codigo y de tipos de datos.
 */
 
-use master;
-
-/*
-IF EXISTS (SELECT name FROM sys.databases WHERE name = 'Com5600G11')
+USE master;
+GO
+-- Me fijo si la base existe y si es asi cierro todo lo q se este haciendo con ella y la dropeo
+IF DB_ID(N'Com5600G11') IS NOT NULL
 BEGIN
-    EXEC msdb.dbo.sp_delete_database_backuphistory @database_name = N'Com5600G11'
-
-    ALTER DATABASE Com5600G11 SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-
+    -- saco a todos los q la esten usando
+    ALTER DATABASE [Com5600G11] SET SINGLE_USER WITH ROLLBACK IMMEDIATE
+    -- la dropeo
     DROP DATABASE [Com5600G11]
-    
-    PRINT N'Base de datos Com5600G11 eliminada correctamente.'
 END
 GO
- */
-
-IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'Com5600G11')
-BEGIN
-    CREATE DATABASE Com5600G11;
-END;
+-- CREO LA BASE
+CREATE DATABASE [Com5600G11]
+GO
+-- USO LA BASE DEL TP
+USE [Com5600G11]
 GO
 
-/*
--- Regresar a modo multi-usuario
-ALTER DATABASE Com5600G11
-SET MULTI_USER 
-WITH ROLLBACK IMMEDIATE;
-GO
-*/
-use [Com5600G11];
-go 
-
-
+--   CREACION  DE  ESQUEMAS  _________________________________________________________
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Operaciones')
 BEGIN
     EXEC('CREATE SCHEMA Operaciones');
@@ -92,16 +78,6 @@ BEGIN
 END
 GO
 
-/*
-IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Persona')
-BEGIN
-    EXEC('CREATE SCHEMA Persona');
-END
-GO
-*/
-
-
---   CREACION  DE  ESQUEMAS  _________________________________________________________
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Negocio')
 BEGIN
     EXEC('CREATE SCHEMA Negocio');
@@ -141,15 +117,45 @@ GO
 IF OBJECT_ID('Consorcio.TipoRol', 'U') IS NOT NULL
 DROP TABLE Consorcio.TipoRol;
 GO
+
+CREATE TABLE Consorcio.TipoRol (
+    idTipoRol INT IDENTITY(1,1) PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL UNIQUE,
+    descripcion VARCHAR(200)
+);
+GO
+
+-- Tabla: Persona
+IF OBJECT_ID('Consorcio.Persona', 'U') IS NOT NULL
+    DROP TABLE Consorcio.Persona;
+GO
+
+CREATE TABLE Consorcio.Persona (
+    idPersona INT IDENTITY(1,1) PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    apellido VARCHAR(100) NOT NULL,
+    dni VARCHAR(20) NOT NULL,
+    email VARCHAR(150),
+    telefono VARCHAR(50),
+    CVU_CBU VARCHAR(22),
+    idTipoRol INT NOT NULL,
+    CONSTRAINT FK_Consorcio_TipoRol FOREIGN KEY (idTipoRol) 
+        REFERENCES Consorcio.TipoRol(idTipoRol)
+);
+GO
+
+
+
+IF OBJECT_ID(N'Consorcio.CuentaBancaria','U') IS NULL
 BEGIN
-    CREATE TABLE Consorcio.TipoRol 
-    (
-        idTipoRol INT IDENTITY(1,1) PRIMARY KEY,
-        nombre VARCHAR(50) NOT NULL UNIQUE,
-        descripcion VARCHAR(200)
-    )
+	CREATE TABLE Consorcio.CuentaBancaria(
+		CVU_CBU CHAR(22) PRIMARY KEY,
+		nombreTitular VARCHAR(50),
+		saldo DECIMAL(10,2)
+		)
 END
 GO
+
 --PERSONA
 IF OBJECT_ID('Consorcio.Persona', 'U') IS NOT NULL
 DROP TABLE Consorcio.Persona;
@@ -160,10 +166,10 @@ BEGIN
         idPersona INT IDENTITY(1,1) PRIMARY KEY,
         nombre VARCHAR(100) NOT NULL,
         apellido VARCHAR(100) NOT NULL,
-        dni VARCHAR(20) NOT NULL UNIQUE,
+        dni VARCHAR(20) NOT NULL,
         email VARCHAR(150),
         telefono VARCHAR(50),
-        cbu_cvu VARCHAR(22),
+        CVU_CBU VARCHAR(22),
         idTipoRol INT NOT NULL,
         CONSTRAINT FK_Consorcio_TipoRol FOREIGN KEY (idTipoRol) 
             REFERENCES Consorcio.TipoRol(idTipoRol)
@@ -179,7 +185,7 @@ BEGIN
 	CREATE TABLE Consorcio.CuentaBancaria
     (
 		CVU_CBU CHAR(22) PRIMARY KEY,
-		nombreTitular CHAR(22),
+		nombreTitular VARCHAR(50),
 		saldo DECIMAL(10,2)
 	)
 END
@@ -406,4 +412,3 @@ BEGIN
     )
 END
 GO
-
