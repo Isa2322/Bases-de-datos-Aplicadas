@@ -358,9 +358,9 @@ BEGIN
             -- evitar duplicado por Tipo de Gasto/Expensa
             WHERE NOT EXISTS (
                 SELECT 1 
-                FROM Negocio.GastoOrdinario AS GO
-                WHERE GO.idExpensa = E.id 
-                AND GO.tipoServicio = S.TipoGastoBruto
+                FROM Negocio.GastoOrdinario AS GA
+                WHERE GA.idExpensa = E.id 
+                AND GA.tipoServicio = S.TipoGastoBruto
             )
             AND E.id IS NOT NULL;  
     END TRY

@@ -125,36 +125,6 @@ CREATE TABLE Consorcio.TipoRol (
 );
 GO
 
--- Tabla: Persona
-IF OBJECT_ID('Consorcio.Persona', 'U') IS NOT NULL
-    DROP TABLE Consorcio.Persona;
-GO
-
-CREATE TABLE Consorcio.Persona (
-    idPersona INT IDENTITY(1,1) PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL,
-    apellido VARCHAR(100) NOT NULL,
-    dni VARCHAR(20) NOT NULL,
-    email VARCHAR(150),
-    telefono VARCHAR(50),
-    CVU_CBU VARCHAR(22),
-    idTipoRol INT NOT NULL,
-    CONSTRAINT FK_Consorcio_TipoRol FOREIGN KEY (idTipoRol) 
-        REFERENCES Consorcio.TipoRol(idTipoRol)
-);
-GO
-
-
-
-IF OBJECT_ID(N'Consorcio.CuentaBancaria','U') IS NULL
-BEGIN
-	CREATE TABLE Consorcio.CuentaBancaria(
-		CVU_CBU CHAR(22) PRIMARY KEY,
-		nombreTitular VARCHAR(50),
-		saldo DECIMAL(10,2)
-		)
-END
-GO
 
 --PERSONA
 IF OBJECT_ID('Consorcio.Persona', 'U') IS NOT NULL
