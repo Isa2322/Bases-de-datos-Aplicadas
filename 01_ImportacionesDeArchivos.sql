@@ -14,7 +14,30 @@ Pastori, Ximena - 42300128*/
 USE [Com5600G11]; 
 GO
 
+/* ================================================================================================
+   CONFIGURACIÓN NECESARIA PARA USAR LOS STORED PROCEDURES CON ARCHIVOS EXCEL (.XLSX):
 
+   Los procedures de importacion "Operaciones.sp_ImportarDatosConsorcios_excel" y 
+   "Operaciones.sp_ImportarDatosProveedores_excel" requieren que SQL Server pueda acceder 
+   al archivo de Excel usando el proveedor OLE DB de Microsoft (ACE). 
+
+   Si el proveedor no está instalado o habilitado, utilizar los SP "Operaciones.sp_ImportarDatosConsorcios" y
+   "Operaciones.sp_ImportarDatosProveedores" para la importacion.
+
+   El procedimiento usa el proveedor `Microsoft.ACE.OLEDB.16.0` (versión moderna y más estable)
+
+   Si está instalado, previo a la ejecucion de los SP ejecutar las siguientes sentencias:
+   (Ejecutar con permisos de sysadmin en la base master)
+
+       ```sql
+       EXEC sp_configure 'show advanced options', 1;  
+       RECONFIGURE;
+       EXEC sp_configure 'Ad Hoc Distributed Queries', 1;  
+       RECONFIGURE;
+       EXEC master.dbo.sp_MSset_oledb_prop N'Microsoft.ACE.OLEDB.16.0', N'AllowInProcess', 1;
+       EXEC master.dbo.sp_MSset_oledb_prop N'Microsoft.ACE.OLEDB.16.0', N'DynamicParameters', 1;
+       ```
+   ================================================================================================ */
 
 CREATE OR ALTER PROCEDURE Operaciones.ImportarTiposRol
 AS
@@ -358,11 +381,8 @@ END
 GO
 
 
---____________________________________________________________________________________________________________________________
--- IMPORTACION DE PERSONAS ___________________________________________________________________________________________________
-
-use [Com5600G11];
-GO
+-- ===============================================================================================================
+-- IMPORTACION DE PERSONAS 
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarInquilinosPropietarios
     @RutaArchivo VARCHAR(255)
@@ -471,11 +491,9 @@ END
 END;
 GO
 
- -- FIN IMPORTACION DE PERSONAS
---__________________________________________________________________________________________________________________________
 
---_____________________________________________________________________________________________________________________________________
---IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)____________________________________________________________________________
+--==================================================================================================================
+--IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios en CSV)
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
 AS
 BEGIN
@@ -545,8 +563,9 @@ SET @rutaArchCSV = 'C:\Users\camil\OneDrive\Escritorio\Facultad\BDD\datos varios
 EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
 */
 
---_____________________________________________________________________________________________________________________________________________________________
---IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios)____________________________________________________________________________________________________
+--==================================================================================================================
+--IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios en CSV)
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARCHAR(1000)
 AS
 BEGIN
