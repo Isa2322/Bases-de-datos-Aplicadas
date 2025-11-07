@@ -422,6 +422,9 @@ GO
 
     Si alguien lo prueba y funciona bien, que vea si todos los campos de expensa
     tienen datos con un select * from Negocio.Expensa
+
+	Ver si se puede reemplazar la linea SET @NuevaExpensaID = SCOPE_IDENTITY();
+	con algo mas normal y que sepamos
 */
 
 /*CREATE OR ALTER PROCEDURE Negocio.SP_GenerarExpensasMensuales
