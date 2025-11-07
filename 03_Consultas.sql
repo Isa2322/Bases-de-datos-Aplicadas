@@ -272,4 +272,81 @@ BEGIN
         ) AS XML_Reporte5;
 END
 GO
-----------------------------------------------------------------------------------------------
+
+-- =============================================================================================================
+/*
+    REPORTE 6:
+    Muestre las fechas de pagos de expensas ordinarias de cada UF y la cantidad de días que pasan entre un pago y el siguiente, 
+    para el conjunto examinado. 
+    CON XML
+*/
+CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte6_PagosOrdinarios_XML
+    @idConsorcio INT      = NULL,   -- filtra por consorcio si viene
+    @idUF        INT      = NULL,   -- filtra por unidad funcional si viene
+    @fechaDesde  DATE     = NULL,   -- incluye pagos desde esta fecha (por fecha de Pago)
+    @fechaHasta  DATE     = NULL    -- incluye pagos hasta esta fecha (default hoy)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF @fechaHasta IS NULL SET @fechaHasta = CAST(GETDATE() AS DATE);
+
+    /* 
+       Tomo SOLO pagos aplicados a detalles que tengan componente ORDINARIO (>0).
+       Camino: PagoAplicado -> DetalleExpensa -> UnidadFuncional -> (Consorcio) y Pago(fecha).
+       NOTA: Pago.Pago tiene 'fecha' (datetime2) y cbuCuentaOrigen; no se usa el CBU acá
+             porque la asociación se hace por el aplicado del pago al detalle (ya resuelto). 
+    */
+
+    ;WITH PagosOrdinarios AS
+    (
+        SELECT 
+            uf.id               AS idUF,
+            uf.consorcioId      AS idConsorcio,
+            CAST(p.fecha AS DATE) AS fechaPago
+        FROM Pago.PagoAplicado     AS pa
+        INNER JOIN Pago.Pago       AS p  ON p.id = pa.idPago               -- fecha del pago
+        INNER JOIN Negocio.DetalleExpensa AS de ON de.id = pa.idDetalleExpensa
+        INNER JOIN Consorcio.UnidadFuncional AS uf ON uf.id = de.idUnidadFuncional
+        INNER JOIN Negocio.Expensa AS e ON e.id = de.expensaId
+        WHERE 
+            -- componente ordinario presente
+            ISNULL(de.prorrateoOrdinario, 0) > 0
+            -- filtros por consorcio / UF (opcionales)
+            AND (@idConsorcio IS NULL OR uf.consorcioId = @idConsorcio)
+            AND (@idUF        IS NULL OR uf.id = @idUF)
+            -- filtros de rango por FECHA DE PAGO
+            AND (@fechaDesde IS NULL OR CAST(p.fecha AS DATE) >= @fechaDesde)
+            AND (@fechaHasta IS NULL OR CAST(p.fecha AS DATE) <= @fechaHasta)
+    ),
+    PagosOrdenados AS
+    (
+        -- Ordeno por UF y fecha, y calculo días desde el pago anterior (LAG).
+        SELECT
+            idUF,
+            idConsorcio,
+            fechaPago,
+            DATEDIFF(DAY, LAG(fechaPago) OVER (PARTITION BY idUF ORDER BY fechaPago), fechaPago) AS diasDesdeAnterior
+        FROM PagosOrdinarios
+    )
+
+    -- Salida en XML agrupada por UF, con los pagos y el intervalo en días
+    SELECT
+        (
+            SELECT 
+                U.idUF      AS [@id]
+              , (
+                    SELECT 
+                        po.fechaPago         AS [@fecha]
+                      , po.diasDesdeAnterior AS [@diasDesdeAnterior]
+                    FROM PagosOrdenados AS po
+                    WHERE po.idUF = U.idUF
+                    ORDER BY po.fechaPago
+                    FOR XML PATH('pago'), TYPE
+                )
+            FROM (SELECT DISTINCT idUF FROM PagosOrdenados) AS U
+            ORDER BY U.idUF
+            FOR XML PATH('unidadFuncional'), ROOT('pagosOrdinarios'), TYPE
+        ) AS XML_Reporte6;
+END;
+GO
