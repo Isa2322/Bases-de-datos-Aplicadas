@@ -1,11 +1,14 @@
--- =============================================
+/*
+    REPORTE 1: 
+    Se desea analizar el flujo de caja en forma semanal. 
+    Debe presentar la recaudación por pagos ordinarios y extraordinarios de cada semana, el promedio en el periodo, y el acumulado progresivo. 
+*/
 
--- 1
-IF OBJECT_ID('sp_analizar_flujo_egresos_semanal', 'P') IS NOT NULL
-    DROP PROCEDURE sp_analizar_flujo_egresos_semanal;
+IF OBJECT_ID('Operaciones.sp_Reporte1_FlujoSemanal', 'P') IS NOT NULL
+    DROP PROCEDURE Operaciones.sp_Reporte1_FlujoSemanal
 GO
 
-CREATE PROCEDURE sp_analizar_flujo_egresos_semanal
+CREATE PROCEDURE Operaciones.sp_Reporte1_FlujoSemanal
 (
     @NombreConsorcio VARCHAR(100),
     @PeriodoAnio INT,
@@ -106,11 +109,17 @@ BEGIN
     ORDER BY ES.Anio, ES.Semana;
 END
 GO
+--=========================================================================================================
+/*
+    REPORTE 4:
+    Obtenga los 5 (cinco) meses de mayores gastos y los 5 (cinco) de mayores ingresos.  
+*/
 
+IF OBJECT_ID('Operaciones.sp_Reporte4_MayoresGI', 'P') IS NOT NULL
+    DROP PROCEDURE Operaciones.sp_Reporte4_MayoresGI
+GO
 
--- 4
-
-CREATE PROCEDURE Negocio.SP_ObtenerTop5MesesGastosIngresos
+CREATE PROCEDURE Operaciones.sp_Reporte4_MayoresGI
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -200,8 +209,6 @@ BEGIN
 END
 GO
 
---EXEC Negocio.SP_ObtenerTop5MesesGastosIngresos;
---GO
 -- ======================================================================================================================
 
 /*
@@ -211,6 +218,9 @@ GO
     contactar o remitir el trámite al estudio jurídico.
     CON XML
 */
+IF OBJECT_ID('Operaciones.sp_Reporte5_MayoresMorosos_XML', 'P') IS NOT NULL
+    DROP PROCEDURE Operaciones.sp_Reporte5_MayoresMorosos_XML
+GO
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte5_MayoresMorosos_XML
     @idConsorcio INT,
@@ -280,6 +290,10 @@ GO
     para el conjunto examinado. 
     CON XML
 */
+IF OBJECT_ID('Operaciones.sp_Reporte6_PagosOrdinarios_XML', 'P') IS NOT NULL
+    DROP PROCEDURE Operaciones.sp_Reporte6_PagosOrdinarios_XML
+GO
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte6_PagosOrdinarios_XML
     @idConsorcio INT      = NULL,   -- filtra por consorcio si viene
     @idUF        INT      = NULL,   -- filtra por unidad funcional si viene
