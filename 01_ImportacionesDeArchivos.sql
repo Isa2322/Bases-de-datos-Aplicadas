@@ -41,8 +41,8 @@ GO
 
 --Funcion para cargar el archivo pagos_consorcios.csv
 CREATE OR ALTER PROCEDURE Operaciones.ImportacionPago @RutaArchivo VARCHAR(255)
-	AS
-	BEGIN
+AS
+BEGIN
 
 IF OBJECT_ID('Operaciones.PagosConsorcioTemp') IS NOT NULL DROP TABLE Operaciones.PagosConsorcioTemp; 
 CREATE TABLE Operaciones.PagosConsorcioTemp (
@@ -446,6 +446,16 @@ GO
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
 AS
 BEGIN
+    --esto es para verificar q la ruta venga bien escrita
+       IF CHARINDEX('''', @rutaArch) > 0 OR
+       CHARINDEX('--', @rutaArch) > 0 OR
+       CHARINDEX('/*', @rutaArchivo) > 0 OR 
+       CHARINDEX('*/', @rutaArchivo) > 0 OR
+       CHARINDEX(';', @rutaArchivo) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END
 	--armo una temporal para guardar los datos
 	CREATE TABLE #TempConsorciosBulk 
 	( 
@@ -508,6 +518,16 @@ CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARC
 AS
 BEGIN
     SET NOCOUNT ON;
+    --esto es para verificar q la ruta venga bien escrita
+       IF CHARINDEX('''', @rutaArch) > 0 OR
+       CHARINDEX('--', @rutaArch) > 0 OR
+       CHARINDEX('/*', @rutaArchivo) > 0 OR 
+       CHARINDEX('*/', @rutaArchivo) > 0 OR
+       CHARINDEX(';', @rutaArchivo) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END
     --tabla para el bulk insert del archivo
     CREATE TABLE #TempProveedoresGastoOriginal 
     (
