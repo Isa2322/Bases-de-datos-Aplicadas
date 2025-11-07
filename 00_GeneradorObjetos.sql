@@ -319,7 +319,7 @@ BEGIN
         nroCuota INT NULL,
         totalCuota DECIMAL(18, 2) NOT NULL,
         CONSTRAINT FK_GastoExt_Expensa FOREIGN KEY (idExpensa) REFERENCES Negocio.Expensa(id),
-		CONSTRAINT FK_Id_Consorcio FOREIGN KEY (consorcioId) REFERENCES Consorcio.Consorcio(id)
+		CONSTRAINT FK_Id_Consorcio2 FOREIGN KEY (consorcioId) REFERENCES Consorcio.Consorcio(id)
     )
 END
 GO
