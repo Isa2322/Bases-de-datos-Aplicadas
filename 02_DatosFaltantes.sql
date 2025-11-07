@@ -259,6 +259,106 @@ BEGIN
 END
 GO
 
+-- =============================================
+-- ====cambio en la tabla de aplicar pagos======
+-- =============================================
+
+/*
+
+/*
+    Resumen de cambios: 
+    Ahora los pagos tambien van a la tabla de detalles expnesa
+    La varaible quedo pero no la use (REVISAR si hace falta solamente)
+
+    No da errores pero no la use con datos (REVISAR)
+
+*/
+
+-- CAmbiaria nombre a aplicarPagos solamente
+CREATE OR ALTER PROCEDURE Operaciones.sp_AplicarPagosACuentas
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @FilasAfectadas INT = 0;
+
+    --  veo los pagos a aplicar y los guardao en tabla temporal
+    SELECT
+        P.id AS idPago,
+        P.importe AS importeAplicado,
+        DE.id AS idDetalleExpensa
+    INTO #PagosAAplicar
+    FROM Pago.Pago AS P
+
+        -- Encontrar la Unidad Funcional (UF) dueña del CVU/CBU de origen del pago
+        INNER JOIN Consorcio.UnidadFuncional AS UF
+        ON P.cbuCuentaOrigen = UF.CVU_CBU
+
+        -- Encontrar el Detalle de Expensa (DE) correspondiente a esa UF
+        INNER JOIN Negocio.DetalleExpensa AS DE
+        ON DE.idUnidadFuncional = UF.id
+
+        -- Encontrar la Expensa (E) para verificar el período
+        INNER JOIN Negocio.Expensa AS E
+        ON DE.expensaId = E.id
+
+    WHERE 
+        -- LÓGICA DE APLICACIÓN DEL PERÍODO (Mes de Pago = Mes de Vencimiento de Expensa)
+        -- Si el pago se hace en el mes M, se aplica a la expensa generada para el periodo M-1.
+        E.fechaPeriodoAnio = 
+            CASE 
+                -- Si el pago se hace en enero, se aplica a la expensa de diciembre del año anterior.
+                WHEN MONTH(P.fecha) = 1 THEN YEAR(P.fecha) - 1 
+                ELSE YEAR(P.fecha)
+            END
+        AND
+        E.fechaPeriodoMes = 
+            CASE 
+                -- Si el pago se hace en enero (1), el mes del periodo de expensa es diciembre (12).
+                WHEN MONTH(P.fecha) = 1 THEN 12 
+                ELSE MONTH(P.fecha) - 1 -- Si es otro mes, se aplica al mes anterior.
+            END
+
+        -- GUARDRAIL: Solo aplica pagos que aún NO hayan sido registrados en PagoAplicado.
+        AND NOT EXISTS (
+            SELECT 1
+            FROM Pago.PagoAplicado AS PA
+            WHERE PA.idPago = P.id
+        );
+
+    -- Insertar en Pago.PagoAplicado desde la tabla temporal
+    INSERT INTO Pago.PagoAplicado (idPago, idDetalleExpensa, importeAplicado)
+    SELECT
+        idPago,
+        idDetalleExpensa,
+        importeAplicado
+    FROM #PagosAAplicar;
+
+
+    -- Actualizar pagosRecibidos en DetalleExpensa
+    -- Agrupamos por si una UF hizo un par de pagos que aplican al mismo DetalleExpensa
+    WITH SumaPagosPorDetalle AS
+    (
+        SELECT
+            idDetalleExpensa,
+            SUM(importeAplicado) AS MontoTotalPagado
+        FROM #PagosAAplicar
+        GROUP BY idDetalleExpensa
+    )
+    UPDATE DE
+    SET DE.pagosRecibidos = ISNULL(DE.pagosRecibidos, 0) + SP.MontoTotalPagado
+    FROM Negocio.DetalleExpensa AS DE
+    INNER JOIN SumaPagosPorDetalle AS SP ON DE.id = SP.idDetalleExpensa;
+
+    SET @FilasAfectadas = @@ROWCOUNT;
+
+    -- Limpiar tabla temporal
+    DROP TABLE IF EXISTS #PagosAAplicar;
+
+END
+GO
+*/
+
 --Rellena tabla CuentaBancaria
 CREATE OR ALTER PROCEDURE SP_generadorCuentaBancaria
 AS
