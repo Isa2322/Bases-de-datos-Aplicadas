@@ -39,17 +39,6 @@ CREATE OR ALTER PROCEDURE Pago.ImportacionPago
 END
 GO
 
--- Función para determinar el N-ésimo día hábil de un mes _________________________________________________  
--- PONERLO ANTES DE  CARGAR EXPENSA O CUALQUIER OTRA QUE LA UTILICE!!!!!
-
---IF OBJECT_ID('Operaciones.ObtenerDiaHabil') IS NOT NULL DROP FUNCTION Operaciones.ObtenerDiaHabil;
---GO
-
-
--- servicios.servicios.json
-
-use [Com5600G11];
-go 
 --Funcion para cargar el archivo pagos_consorcios.csv
 CREATE OR ALTER PROCEDURE Operaciones.ImportacionPago @RutaArchivo VARCHAR(255)
 	AS
@@ -134,9 +123,9 @@ DROP TABLE Operaciones.PagosConsorcioTemp
 END
 GO
 
--- Funcion de Limpieza: Crea un nuevo lote con GO
-IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Negocio.LimpiarNumero;
-GO
+-- Función para determinar el N-ésimo día hábil de un mes _________________________________________________  
+-- PONERLO ANTES DE  CARGAR EXPENSA O CUALQUIER OTRA QUE LA UTILICE!!!!!
+
 CREATE or alter FUNCTION Operaciones.ObtenerDiaHabil
 (
     @Año INT,
@@ -188,8 +177,6 @@ END
 GO
 
 -- Funcion de Limpieza _______________________________________________________________________________
---IF OBJECT_ID('Operaciones.LimpiarNumero') IS NOT NULL DROP FUNCTION Operaciones.LimpiarNumero;
---GO
 
 CREATE or alter FUNCTION Operaciones.LimpiarNumero (@ImporteVarchar VARCHAR(50))
 RETURNS DECIMAL(18, 2)
@@ -206,8 +193,7 @@ BEGIN
 END;
 GO
 
--- servicios.servicios.json _______________________________________________________________________________
-
+-- servicios.servicios.json 
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarGastosMensuales
 ( 
