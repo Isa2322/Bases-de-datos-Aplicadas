@@ -14,8 +14,32 @@ Pastori, Ximena - 42300128*/
 USE [Com5600G11]; 
 GO
 
--- FORMAS DE PAGO
 
+
+CREATE OR ALTER PROCEDURE Operaciones.ImportarTiposRol
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Inserta el tipo "Inquilino" si no existe
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.TipoRol WHERE nombre = 'Inquilino')
+    BEGIN
+        INSERT INTO Consorcio.TipoRol (nombre, descripcion)
+        VALUES ('Inquilino', 'Persona que alquila una unidad funcional dentro del consorcio.');
+    END
+
+    -- Inserta el tipo "Propietario" si no existe
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.TipoRol WHERE nombre = 'Propietario')
+    BEGIN
+        INSERT INTO Consorcio.TipoRol (nombre, descripcion)
+        VALUES ('Propietario', 'Dueño de una o más unidades funcionales dentro del consorcio.');
+    END
+
+    PRINT N'Carga de datos de Tipos de Rol finalizada.';
+END
+GO
+
+-- FORMAS DE PAGO
 CREATE OR ALTER PROCEDURE Pago.ImportacionPago
 	AS
 	BEGIN
@@ -369,7 +393,7 @@ END
         Email VARCHAR(50),
         Telefono BIGINT,
         CVU_CBU VARCHAR(22),
-        Tipo VARCHAR(20)
+        Tipo BIT
     );
 
 
@@ -379,7 +403,7 @@ END
     PRINT 'Iniciando importaci�n de: ' + @RutaArchivo;
 
     SET @sql = '
-        BULK INSERT TemporalPersonas
+        BULK INSERT #TemporalPersonas
         FROM ''' + @RutaArchivo + '''
         WITH
         (
@@ -391,8 +415,10 @@ END
 
     EXEC(@sql);
 
+
+   
 --borrar nulos
-    DELETE FROM TemporalPersonas
+    DELETE FROM #TemporalPersonas
         WHERE 
         (Nombre IS NULL OR Nombre = '') AND
         (Apellido IS NULL OR Apellido = '') AND
@@ -405,36 +431,43 @@ END
 
 -- Se insertan los archivos en las tablas correspondientes
 
-    DELETE FROM TemporalPersonas
+    DELETE FROM #TemporalPersonas
     WHERE CVU_CBU IN (
         SELECT CVU_CBU
-        FROM TemporalPersonas
+        FROM #TemporalPersonas
         GROUP BY CVU_CBU
         HAVING COUNT(*) > 1
 );
 
-    INSERT INTO Consorcio.Persona (DNI, Nombre, Apellido, CVU_CBU, Telefono, Email, Tipo)
+
+    INSERT INTO Consorcio.Persona (dni, nombre, apellido, CVU_CBU, telefono, email, idTipoRol)
     SELECT 
-        DNI,
-        LTRIM(RTRIM(nombre)) AS Nombre,
-        LTRIM(RTRIM(Apellido)) AS Apellido,
-        LTRIM(RTRIM(CVU_CBU)) AS CVU_CBU,
-        Telefono,
-        REPLACE(LTRIM(RTRIM(Email)), ' ', '') AS Email,
-        LTRIM(RTRIM(Tipo)) AS Tipo
-    FROM TemporalPersonas;
+        LTRIM(RTRIM(tp.DNI)),
+        LTRIM(RTRIM(tp.Nombre)),
+        LTRIM(RTRIM(tp.Apellido)),
+        LTRIM(RTRIM(tp.CVU_CBU)),
+        LTRIM(RTRIM(tp.Telefono)),
+        REPLACE(LTRIM(RTRIM(tp.Email)), ' ', ''),
+        CASE tp.Tipo 
+            WHEN 1 THEN 1  
+            WHEN 0 THEN 2  
+        END AS idTipoRol
+    FROM #TemporalPersonas tp
+    WHERE NOT EXISTS (
+        SELECT 1 FROM Consorcio.Persona p WHERE p.DNI = tp.DNI
+    );
 
     -- join de persona y cuenta bancaria por CBU para insertar con la FK
-   INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, TitularId)
+   INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular)
     SELECT DISTINCT 
         LTRIM(RTRIM(it.CVU_CBU)) AS cbu,
-        p.idPersona
-    FROM TemporalPersonas it
+        p.nombre
+    FROM #TemporalPersonas it
     JOIN Consorcio.Persona p ON LTRIM(RTRIM(p.CVU_CBU)) = LTRIM(RTRIM(it.CVU_CBU))
     WHERE it.CVU_CBU IS NOT NULL AND it.CVU_CBU <> '';
 
 
-    DROP TABLE IF EXISTS dbo.TemporalPersonas
+    DROP TABLE IF EXISTS dbo.#TemporalPersonas
 END;
 GO
 
@@ -640,7 +673,7 @@ BEGIN
             BULK INSERT #CargaDatosTemp
             FROM ''' + @RutaArchivo + '''
             WITH (
-                FIELDTERMINATOR = ''|'',
+               FIELDTERMINATOR = ''|'',
                 ROWTERMINATOR = ''\n'',
                 FIRSTROW = 2
             );';
@@ -808,3 +841,44 @@ BEGIN
 
 END;
 GO
+
+/*
+DECLARE @rutaArchCSV VARCHAR(1000)
+SET @rutaArchCSV = 'C:\Users\Abigail\Downloads\consorcios\datos varios.xlsx'
+EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
+go
+
+
+EXEC Operaciones.sp_ImportarInquilinosPropietarios 'C:\Users\Abigail\Downloads\consorcios\Inquilino-propietarios-datos.csv'
+go
+
+EXEC Operaciones.CargaInquilinoPropietariosUF 'C:\Users\Abigail\Downloads\consorcios\Inquilino-propietarios-UF.csv'
+
+
+
+EXEC Operaciones.sp_ImportarGastosMensuales 'C:\Users\Abigail\Downloads\consorcios\Servicios.Servicios.json'
+EXEC Operaciones.sp_ImportarUFporConsorcio 'C:\Users\Abigail\Downloads\consorcios\UF por consorcio.txt'
+
+*/
+
+--1
+--EXEC Pago.ImportacionPago
+
+--2
+--EXEC Operaciones.ObtenerDiaHabil 2025,01,25
+
+--EXEC Operaciones.ImportarTiposRol
+
+--3
+--EXEC Operaciones.ImportacionPago 'C:\Users\Abigail\Downloads\consorcios\pagos_consorcios.csv'
+
+--4
+--EXEC Operaciones.sp_ImportarGastosMensuales 'C:\Users\Abigail\Downloads\consorcios\Servicios.Servicios.json'
+
+--5
+--EXEC Operaciones.sp_ImportarInquilinosPropietarios 'C:\Users\Abigail\Downloads\consorcios\Inquilino-propietarios-datos.csv'
+
+--6
+--EXEC Operaciones.sp_ImportarUFporConsorcio 'C:\Users\Abigail\Downloads\consorcios\UF por consorcio.txt'
+
+EXEC Operaciones.sp_ImportarDatosConsorcios 'C:\Users\Abigail\Downloads\consorcios\datos varios.xlsx'

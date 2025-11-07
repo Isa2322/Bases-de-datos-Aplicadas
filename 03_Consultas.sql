@@ -272,5 +272,69 @@ BEGIN
         ) AS XML_Reporte5;
 END
 GO
+----------------------------------------------------------------------------------------------
 
--- ======================================================================================================================
+CREATE OR ALTER PROCEDURE Operaciones.sp_ReporteDiasEntrePagos
+    @FechaInicio DATE,
+    @FechaFin DATE,
+    @IdUF INT
+AS
+BEGIN
+    SELECT 
+        uf.IdUF,
+        p1.FechaPago AS FechaAnterior,
+        p2.FechaPago AS FechaSiguiente,
+        DATEDIFF(DAY, p1.FechaPago, p2.FechaPago) AS DiasEntrePagos
+    FROM Pago.Pagos p1
+    JOIN Pago.Pagos p2 ON p1.IdUF = p2.IdUF AND p2.FechaPago > p1.FechaPago
+    JOIN Consorcio.UnidadFuncional uf ON p1.IdUF = uf.IdUF
+    WHERE p1.FechaPago BETWEEN @FechaInicio AND @FechaFin
+      AND uf.IdUF = @IdUF
+    ORDER BY uf.IdUF, p1.FechaPago;
+END
+GO
+
+
+
+-------------------------------------------
+CREATE OR ALTER PROCEDURE Operaciones.sp_ReportePagosPendientesPorPropietario
+    @IdPropietario INT,
+    @FechaHasta DATE,
+    @EstadoPago NVARCHAR(20)
+AS
+BEGIN
+    SELECT 
+        p.IdPropietario,
+        pr.Nombre,
+        uf.CodigoUF,
+        pa.Monto,
+        pa.FechaVencimiento,
+        pa.Estado
+    FROM Pago.Pagos pa
+    JOIN Propiedad.UnidadFuncional uf ON pa.IdUF = uf.IdUF
+    JOIN Propiedad.Propietario pr ON uf.IdPropietario = pr.IdPropietario
+    WHERE pa.FechaVencimiento <= @FechaHasta
+      AND pa.Estado = @EstadoPago
+      AND pr.IdPropietario = @IdPropietario;
+END
+GO
+
+----------------------------------------------------
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_ReporteObtenerCotizacionDolar
+AS
+BEGIN
+    DECLARE @json NVARCHAR(MAX) = '{
+        "fecha":"2025-11-06",
+        "moneda":"USD",
+        "valor":"955.50"
+    }';
+
+    SELECT * FROM OPENJSON(@json)
+    WITH (
+        fecha DATE,
+        moneda NVARCHAR(10),
+        valor DECIMAL(10,2)
+    );
+END
+GO
