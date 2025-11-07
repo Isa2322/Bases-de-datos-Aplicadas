@@ -842,43 +842,29 @@ BEGIN
 END;
 GO
 
+
 /*
-DECLARE @rutaArchCSV VARCHAR(1000)
-SET @rutaArchCSV = 'C:\Users\Abigail\Downloads\consorcios\datos varios.xlsx'
-EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
-go
+-- 
+EXEC Pago.ImportacionPago
+
+EXEC Operaciones.ObtenerDiaHabil 2025,01,25 //fecha de ejemplo
+
+EXEC Operaciones.ImportarTiposRol
 
 
-EXEC Operaciones.sp_ImportarInquilinosPropietarios 'C:\Users\Abigail\Downloads\consorcios\Inquilino-propietarios-datos.csv'
-go
-
-EXEC Operaciones.CargaInquilinoPropietariosUF 'C:\Users\Abigail\Downloads\consorcios\Inquilino-propietarios-UF.csv'
-
+EXEC Operaciones.ImportacionPago 'C:\Users\Abigail\Downloads\consorcios\pagos_consorcios.csv'
 
 
 EXEC Operaciones.sp_ImportarGastosMensuales 'C:\Users\Abigail\Downloads\consorcios\Servicios.Servicios.json'
-EXEC Operaciones.sp_ImportarUFporConsorcio 'C:\Users\Abigail\Downloads\consorcios\UF por consorcio.txt'
+
+
+EXEC Operaciones.sp_ImportarInquilinosPropietarios 'C:\Users\Abigail\Downloads\consorcios\Inquilino-propietarios-datos.csv'
+
+
+
+---------------
+EXEC Operaciones.sp_ImportarUFporConsorcioTXT 'C:\Users\Abigail\Downloads\consorcios\UF por consorcio.txt'
+EXEC Operaciones.sp_ImportarDatosConsorcios 'C:\Users\Abigail\Downloads\consorcios\datos varios.xlsx'
 
 */
 
---1
---EXEC Pago.ImportacionPago
-
---2
---EXEC Operaciones.ObtenerDiaHabil 2025,01,25
-
---EXEC Operaciones.ImportarTiposRol
-
---3
---EXEC Operaciones.ImportacionPago 'C:\Users\Abigail\Downloads\consorcios\pagos_consorcios.csv'
-
---4
---EXEC Operaciones.sp_ImportarGastosMensuales 'C:\Users\Abigail\Downloads\consorcios\Servicios.Servicios.json'
-
---5
---EXEC Operaciones.sp_ImportarInquilinosPropietarios 'C:\Users\Abigail\Downloads\consorcios\Inquilino-propietarios-datos.csv'
-
---6
---EXEC Operaciones.sp_ImportarUFporConsorcio 'C:\Users\Abigail\Downloads\consorcios\UF por consorcio.txt'
-
-EXEC Operaciones.sp_ImportarDatosConsorcios 'C:\Users\Abigail\Downloads\consorcios\datos varios.xlsx'

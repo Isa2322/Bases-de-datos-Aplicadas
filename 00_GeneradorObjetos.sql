@@ -166,10 +166,10 @@ BEGIN
         idPersona INT IDENTITY(1,1) PRIMARY KEY,
         nombre VARCHAR(100) NOT NULL,
         apellido VARCHAR(100) NOT NULL,
-        dni VARCHAR(20) NOT NULL UNIQUE,
+        dni VARCHAR(20) NOT NULL,
         email VARCHAR(150),
         telefono VARCHAR(50),
-        cbu_cvu VARCHAR(22),
+        CVU_CBU VARCHAR(22),
         idTipoRol INT NOT NULL,
         CONSTRAINT FK_Consorcio_TipoRol FOREIGN KEY (idTipoRol) 
             REFERENCES Consorcio.TipoRol(idTipoRol)
@@ -185,7 +185,7 @@ BEGIN
 	CREATE TABLE Consorcio.CuentaBancaria
     (
 		CVU_CBU CHAR(22) PRIMARY KEY,
-		nombreTitular CHAR(22),
+		nombreTitular VARCHAR(50),
 		saldo DECIMAL(10,2)
 	)
 END
