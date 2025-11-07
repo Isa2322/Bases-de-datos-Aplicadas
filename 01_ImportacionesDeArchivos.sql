@@ -690,11 +690,10 @@ BEGIN
     FROM UnidadFuncional AS UF
     INNER JOIN #ConsorcioTemp AS Ctemp ON UF.CVU_CBU = Ctemp.CVU_CBUPersona
     WHERE 
-        ISNULL(UF.numero, '') <> ISNULL(Ctemp.numero, '') OR
-        ISNULL(UF.piso, '') <> ISNULL(Ctemp.piso, '') OR
-        ISNULL(UF.departamento, '') <> ISNULL(Ctemp.departamento, '') OR
-        UF.consorcioId <> Ctemp.ID_Consorcio;
-
+        target.numero <> source.numero OR
+        target.piso <> source.piso OR
+        target.departamento <> source.departamento OR
+        target.consorcioId <> source.ID_Consorcio;
 	
 	INSERT INTO UnidadFuncional (CVU_CBU, numero, piso, departamento, consorcioId, metrosCuadrados, porcentajeExpensas)
     SELECT 
