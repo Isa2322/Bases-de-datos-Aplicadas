@@ -861,30 +861,3 @@ BEGIN
 
 END;
 GO
-
-
-/*
--- 
-EXEC Pago.ImportacionPago
-
-EXEC Operaciones.ObtenerDiaHabil 2025,01,25 //fecha de ejemplo
-
-EXEC Operaciones.ImportarTiposRol
-
-
-EXEC Operaciones.ImportacionPago 'C:\Users\Abigail\Downloads\consorcios\pagos_consorcios.csv'
-
-
-EXEC Operaciones.sp_ImportarGastosMensuales 'C:\Users\Abigail\Downloads\consorcios\Servicios.Servicios.json'
-
-
-EXEC Operaciones.sp_ImportarInquilinosPropietarios 'C:\Users\Abigail\Downloads\consorcios\Inquilino-propietarios-datos.csv'
-
-
-
----------------
-EXEC Operaciones.sp_ImportarUFporConsorcioTXT 'C:\Users\Abigail\Downloads\consorcios\UF por consorcio.txt'
-EXEC Operaciones.sp_ImportarDatosConsorcios 'C:\Users\Abigail\Downloads\consorcios\datos varios.xlsx'
-
-*/
-
