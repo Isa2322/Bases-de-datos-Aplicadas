@@ -1,4 +1,3 @@
--- =============================================
 USE [Com5600G11]; 
 GO
 
@@ -130,7 +129,7 @@ CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte2_RecaudacionMesDepto
     @incluirSinPagos BIT = 0 
 AS
 BEGIN
-    SET NOCOUNT ON
+    SET NOCOUNT ON;
     /* 
        Base: pagos aplicados a detalles de expensa.
        Camino: PagoAplicado -> Pago(fecha) -> DetalleExpensa -> UF(departamento) -> Consorcio.
@@ -210,14 +209,18 @@ GO
     Presente un cuadro cruzado con la recaudación total desagregada según su procedencia (ordinario, extraordinario, etc.) según el periodo. 
 */
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte3_RecaudacionPorProcedencia_Crosstab
+IF OBJECT_ID('Operaciones.sp_Reporte3_RecaudacionPorProcedencia', 'P') IS NOT NULL
+    DROP PROCEDURE Operaciones.sp_Reporte3_RecaudacionPorProcedencia
+GO
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte3_RecaudacionPorProcedencia
     @idConsorcio INT = NULL, 
     @fechaDesde  DATE = NULL, 
     @fechaHasta  DATE = NULL 
 AS
 BEGIN
     SET NOCOUNT ON;
-    IF @fechaHasta IS NULL SET @fechaHasta = CAST(GETDATE() AS DATE)
+    IF @fechaHasta IS NULL SET @fechaHasta = CAST(GETDATE() AS DATE);
 
     /*
        Base: pagos aplicados a DetalleExpensa.
@@ -436,7 +439,7 @@ BEGIN
         INNER JOIN Consorcio.Consorcio c        ON c.id = uf.consorcioId
         -- titular por CBU/CVU registrado en la UF
         INNER JOIN Consorcio.Persona p
-            ON (p.cbu = uf.CVU_CBU OR p.cvu = uf.CVU_CBU)
+            ON (p.CVU_CBU = uf.CVU_CBU OR p.CVU_CBU = uf.CVU_CBU)
         WHERE (@idConsorcio IS NULL OR c.id = @idConsorcio)
         GROUP BY p.dni, p.nombre, p.apellido, p.email, p.telefono
         HAVING SUM(d.Deuda) > 0.01
