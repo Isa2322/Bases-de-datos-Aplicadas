@@ -232,7 +232,7 @@ BEGIN
     CREATE TABLE Negocio.Expensa
     (
         id INT PRIMARY KEY IDENTITY(1,1),
-        consorcio_id INT,
+        consorcioId INT,
         saldoAnterior DECIMAL(10,2),
         ingresosEnTermino DECIMAL(10,2),
         ingresosAdeudados DECIMAL(10,2),
@@ -241,7 +241,7 @@ BEGIN
         saldoCierre DECIMAL(10,2),
         fechaPeriodoAnio INT NULL, 
         fechaPeriodoMes INT NULL,  
-        FOREIGN KEY (consorcio_id) REFERENCES Consorcio.Consorcio(id)
+        FOREIGN KEY (consorcioId) REFERENCES Consorcio.Consorcio(id)
     )
 END
 GO
