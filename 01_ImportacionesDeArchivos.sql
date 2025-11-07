@@ -899,7 +899,7 @@ BEGIN
         cd.piso,
         cd.departamento
     FROM #CargaDatosTemp AS cd
-    JOIN Consorcio AS c ON cd.consorcio = c.nombre;
+    JOIN Consorcio.Consorcio AS c ON cd.consorcio = c.nombre;
 
     -- UPDATE para registros existentes
     UPDATE UF
@@ -908,7 +908,7 @@ BEGIN
         UF.piso = Ctemp.piso,
         UF.departamento = Ctemp.departamento,
         UF.consorcioId = Ctemp.ID_Consorcio
-    FROM UnidadFuncional AS UF
+    FROM Consorcio.UnidadFuncional AS UF
     INNER JOIN #ConsorcioTemp AS Ctemp ON UF.CVU_CBU = Ctemp.CVU_CBUPersona
     WHERE 
         UF.numero <> Ctemp.numero OR
@@ -916,7 +916,7 @@ BEGIN
         UF.departamento <> Ctemp.departamento OR
         UF.consorcioId <> Ctemp.ID_Consorcio;
 	
-	INSERT INTO UnidadFuncional (CVU_CBU, numero, piso, departamento, consorcioId, metrosCuadrados, porcentajeExpensas)
+	INSERT INTO Consorcio.UnidadFuncional (CVU_CBU, numero, piso, departamento, consorcioId, metrosCuadrados, porcentajeExpensas)
     SELECT 
         Ctemp.CVU_CBUPersona, 
         Ctemp.numero, 
@@ -928,7 +928,7 @@ BEGIN
     FROM #ConsorcioTemp AS Ctemp
     WHERE NOT EXISTS (
         SELECT 1 
-        FROM UnidadFuncional AS UF 
+        FROM Consorcio.UnidadFuncional AS UF 
         WHERE UF.CVU_CBU = Ctemp.CVU_CBUPersona
     );
 
