@@ -40,7 +40,7 @@ END
 GO
 
 -- FORMAS DE PAGO
-CREATE OR ALTER PROCEDURE Pago.ImportacionPago
+CREATE OR ALTER PROCEDURE Operaciones.FormaDePagoCarga
 	AS
 	BEGIN
 
@@ -454,17 +454,10 @@ END
         END AS idTipoRol
     FROM #TemporalPersonas tp
     WHERE NOT EXISTS (
-        SELECT 1 FROM Consorcio.Persona p WHERE p.DNI = tp.DNI
+        SELECT 1 FROM Consorcio.Persona p 
+        WHERE p.DNI = tp.DNI
+        AND p.CVU_CBU = tp.CVU_CBU
     );
-
-    -- join de persona y cuenta bancaria por CBU para insertar con la FK
-   INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular)
-    SELECT DISTINCT 
-        LTRIM(RTRIM(it.CVU_CBU)) AS cbu,
-        p.nombre
-    FROM #TemporalPersonas it
-    JOIN Consorcio.Persona p ON LTRIM(RTRIM(p.CVU_CBU)) = LTRIM(RTRIM(it.CVU_CBU))
-    WHERE it.CVU_CBU IS NOT NULL AND it.CVU_CBU <> '';
 
 
     DROP TABLE IF EXISTS dbo.#TemporalPersonas
@@ -517,11 +510,11 @@ BEGIN
 	--Dsps de esto ya tendria todo insertado en la tabla temporal
 	--Ahora tengo q pasar las cosas a la tabla real
 	--Esta actualizacion se hace comparando con el nombre, si no encuentra una coincidencia del nombre en la tabla considera q tenes un consorcio nuevo y lo inserta
-	UPDATE Consorcio
+	UPDATE Consorcio.Consorcio
     SET direccion = Fuente.direccionCSV, metrosCuadradosTotal = Fuente.superficieTotalCSV
-    FROM Consorcio AS Final INNER JOIN #TempConsorciosBulk AS Fuente
+    FROM Consorcio.Consorcio AS Final INNER JOIN #TempConsorciosBulk AS Fuente
     ON Final.nombre = Fuente.nombreCSV
-    INSERT INTO Consorcio 
+    INSERT INTO Consorcio.Consorcio 
 	(
          nombre,
          direccion,
@@ -532,7 +525,7 @@ BEGIN
 	WHERE NOT EXISTS 
 			(
                 SELECT 1
-                FROM Consorcio AS Final
+                FROM Consorcio.Consorcio AS Final
                 WHERE Final.nombre = Fuente.nombreCSV AND Final.direccion = Fuente.direccionCSV
             ) --basicamente aca se fija q para actualizar ya exista un consorcio con el mismo nombre y direccion y sino inserta uno nuevo
 
