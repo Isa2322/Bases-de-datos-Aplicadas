@@ -272,6 +272,9 @@ GO
 
     No da errores pero no la use con datos (REVISAR)
 
+	Si alguien lo prueba y funciona bien, que vea si todos los campos de DEtallExpensa
+    tienen datos con un select * from Negocio.DetalleExpensa
+
 */
 
 -- CAmbiaria nombre a aplicarPagos solamente
@@ -406,3 +409,164 @@ BEGIN
 END
 END 
 GO
+
+
+-- =============================================
+-- Generador de expensas
+/*
+    Lo pude probar con muy pocos datos y andaba, hay que volver
+    a testear con todas las demas tablas cargadas.
+
+    Deberia funcioar bien. para cuaquier Enero, para otros meses me tiro error
+    porque no tenia datos de mesews anteriores.
+
+    Si alguien lo prueba y funciona bien, que vea si todos los campos de expensa
+    tienen datos con un select * from Negocio.Expensa
+*/
+
+/*CREATE OR ALTER PROCEDURE Negocio.SP_GenerarExpensasMensuales
+    @ConsorcioID INT,
+    @Anio INT,
+    @Mes INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- Variables para el nuevo encabezado de Expensa
+    DECLARE @NuevaExpensaID INT;
+    DECLARE @SaldoAnteriorConsorcio DECIMAL(18,2);
+    DECLARE @TotalIngresosMes DECIMAL(18,2);
+    DECLARE @TotalGastoOrd DECIMAL(18,2);
+    DECLARE @TotalGastoExt DECIMAL(18,2);
+    DECLARE @EgresosTotales DECIMAL(18,2);
+    DECLARE @SaldoCierre DECIMAL(18,2);
+
+    -- Variables para buscar el mes anterior
+    DECLARE @FechaMesAnterior DATE = DATEADD(MONTH, -1, DATEFROMPARTS(@Anio, @Mes, 1));
+    DECLARE @AnioAnterior INT = YEAR(@FechaMesAnterior);
+    DECLARE @MesAnterior INT = MONTH(@FechaMesAnterior);
+
+    BEGIN TRY
+        -- Obtener saldo anterior del consorcio
+        SELECT @SaldoAnteriorConsorcio = ISNULL(saldoCierre, 0)
+        FROM Negocio.Expensa
+        WHERE consorcioId = @ConsorcioID
+          AND fechaPeriodoAnio = @AnioAnterior
+          AND fechaPeriodoMes = @MesAnterior;
+
+        -- Busco el total de ingresos del mes anterior
+        SELECT @TotalIngresosMes = ISNULL(SUM(de.pagosRecibidos), 0)
+        FROM Negocio.DetalleExpensa AS de
+        INNER JOIN Negocio.Expensa AS e ON de.expensaId = e.id
+        WHERE e.consorcioId = @ConsorcioID
+          AND e.fechaPeriodoAnio = @AnioAnterior
+          AND e.fechaPeriodoMes = @MesAnterior;
+
+        -- Gastos Ordinarios
+        SELECT @TotalGastoOrd = ISNULL(SUM(importeTotal), 0)
+        FROM Negocio.GastoOrdinario
+        WHERE IdExpensa IS NULL
+          AND consorcioId = @ConsorcioID
+          AND YEAR(fechaEmision) = @Anio
+          AND MONTH(fechaEmision) = @Mes;
+          
+        -- Gastos Extraordinarios
+        SELECT @TotalGastoExt = ISNULL(SUM(importeTotal), 0)
+        FROM Negocio.GastoExtraordinario
+        WHERE IdExpensa IS NULL
+          AND consorcioId = @ConsorcioID
+          AND YEAR(fechaEmision) = @Anio
+          AND MONTH(fechaEmision) = @Mes;
+
+        SET @EgresosTotales = @TotalGastoOrd + @TotalGastoExt;
+        
+        -- Saldo de Cierre
+        SET @SaldoCierre = @SaldoAnteriorConsorcio + @TotalIngresosMes - @EgresosTotales;
+
+        -- CREO LA EXPENSA
+        INSERT INTO Negocio.Expensa 
+            (consorcioId, fechaPeriodoAnio, fechaPeriodoMes, 
+             saldoAnterior, ingresosEnTermino, egresos, saldoCierre)
+        VALUES 
+            (@ConsorcioID, @Anio, @Mes, 
+             @SaldoAnteriorConsorcio, @TotalIngresosMes, @EgresosTotales, @SaldoCierre);
+        
+        SET @NuevaExpensaID = SCOPE_IDENTITY(); 
+
+        -- Gastos pendientes apuntan a la nueva expensa
+        UPDATE Negocio.GastoOrdinario
+        SET IdExpensa = @NuevaExpensaID
+        WHERE IdExpensa IS NULL
+          AND consorcioId = @ConsorcioID
+          AND YEAR(fechaEmision) = @Anio
+          AND MONTH(fechaEmision) = @Mes;
+        
+        UPDATE Negocio.GastoExtraordinario
+        SET IdExpensa = @NuevaExpensaID
+        WHERE IdExpensa IS NULL
+          AND consorcioId = @ConsorcioID
+          AND YEAR(fechaEmision) = @Anio
+          AND MONTH(fechaEmision) = @Mes;
+
+        -- Crear detalle de expensas por unidad funcional
+        WITH DeudaMesAnterior AS (
+            SELECT
+                de.idUnidadFuncional,
+                (de.totalaPagar - ISNULL(de.pagosRecibidos, 0)) AS SaldoDeudor
+            FROM Negocio.DetalleExpensa AS de
+            INNER JOIN Negocio.Expensa AS e ON de.expensaId = e.id
+            WHERE e.consorcioId = @ConsorcioID
+              AND e.fechaPeriodoAnio = @AnioAnterior
+              AND e.fechaPeriodoMes = @MesAnterior
+        )
+        
+        INSERT INTO Negocio.DetalleExpensa 
+            (expensaId, idUnidadFuncional, 
+             prorrateoOrdinario, prorrateoExtraordinario, 
+             saldoAnteriorAbonado,
+             interesMora, 
+             pagosRecibidos,
+             totalaPagar)
+        SELECT
+            @NuevaExpensaID, -- El ID de la nueva expensa
+            uf.id,           -- El ID de la unidad funcional
+            
+            -- Prorrateo Ordinario
+            ISNULL((@TotalGastoOrd * (uf.porcentajeExpensas / 100)), 0),
+            
+            -- Prorrateo Extraordinario
+            ISNULL((@TotalGastoExt * (uf.porcentajeExpensas / 100)), 0),
+
+            -- Deuda 
+            ISNULL(dma.SaldoDeudor, 0) AS DeudaAnterior,
+
+            -- Interés por Mora
+            CASE
+                WHEN ISNULL(dma.SaldoDeudor, 0) > 0 THEN (ISNULL(dma.SaldoDeudor, 0) * 0.05) 
+                ELSE 0
+            END AS InteresMora,
+            
+            -- Pagos recibidos
+            0.00,
+
+            -- Total a Pagar
+            ( 
+              ISNULL((@TotalGastoOrd * (uf.porcentajeExpensas / 100)), 0) +   -- Gasto Ord
+              ISNULL((@TotalGastoExt * (uf.porcentajeExpensas / 100)), 0) +   -- Gasto Ext
+              ISNULL(dma.SaldoDeudor, 0) +                                    -- Deuda
+              (CASE WHEN ISNULL(dma.SaldoDeudor, 0) > 0 THEN (ISNULL(dma.SaldoDeudor, 0) * 0.05) ELSE 0 END) -- Interés
+            ) AS TotalPagar
+
+        FROM Consorcio.UnidadFuncional AS uf
+            LEFT JOIN DeudaMesAnterior AS dma ON uf.id = dma.idUnidadFuncional
+        WHERE uf.consorcioId = @ConsorcioID;
+
+        PRINT N'Expensas generadas correctamente para ' + CAST(@Anio AS VARCHAR(4)) + '-' + CAST(@Mes AS VARCHAR(2)) + ' (ID: ' + CAST(@NuevaExpensaID AS VARCHAR(10)) + ')';
+
+    END TRY
+    BEGIN CATCH
+        PRINT N'Error al generar las expensas.';
+    END CATCH
+END
+GO
+*/
