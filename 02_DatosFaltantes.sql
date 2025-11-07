@@ -258,3 +258,51 @@ BEGIN
 
 END
 GO
+
+--Rellena tabla CuentaBancaria
+CREATE OR ALTER PROCEDURE SP_generadorCuentaBancaria
+AS
+BEGIN
+
+DECLARE @i INT = 1
+
+--Maximo de valores generados
+DECLARE @maxi INT = 4 
+
+-- Listas de nombres y apellidos para combinar
+DECLARE @Nombres TABLE (nombre VARCHAR(20));
+INSERT INTO @Nombres VALUES
+('Juan'),('Maria'),('Carlos'),('Monica'),('Jorge'),
+('Lucia'),('Sofia'),('Damian'),('Martina'),('Diego'),
+('Barbara'),('Franco'),('Valentina'),('Nicolas'),('Camila')
+
+DECLARE @Apellidos TABLE (apellido VARCHAR(20));
+INSERT INTO @Apellidos VALUES
+('Perez'),('Gomez'),('Rodriguez'),('Lopez'),('Fernandez'),
+('Garcia'),('Martinez'),('Pereira'),('Romero'),('Torres'),
+('Castro'),('Maciel'),('Lipchis'),('Ramos'),('Molina')
+
+WHILE @i <= @maxi
+BEGIN
+	-- Seleccionar nombre y apellido aleatorio
+		DECLARE @nombre VARCHAR(20) = (
+		SELECT TOP 1 nombre FROM @Nombres ORDER BY NEWID())
+
+	DECLARE @apellido VARCHAR(20) = (
+		SELECT TOP 1 apellido FROM @Apellidos ORDER BY NEWID())
+
+	INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular, saldo)
+	VALUES (
+		-- CVU/CBU= 22 digitos aleatorios rellenados con 0 a la izquierda
+		RIGHT('0000000000000000000000' + CAST(ABS(CHECKSUM(NEWID())) % 1000000000000000000000 AS VARCHAR(22)), 22),
+
+		-- Nombre Titular= combinacion nombre + apellido
+		@nombre + ' ' + @apellido,
+
+		-- Saldo =numero aleatorio entre 1000 y 50000
+		CAST(ROUND(((RAND(CHECKSUM(NEWID())) * 49000) + 1000), 2) AS DECIMAL(10,2)))
+
+	SET @i += 1;
+END
+END 
+GO
