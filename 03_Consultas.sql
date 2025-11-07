@@ -108,6 +108,29 @@ END
 GO
 
 
+CREATE OR ALTER PROCEDURE Operaciones.GastosTotales @mes INT,@anio INT,@departamento varchar(10),@path VARCHAR(MAX)
+AS
+BEGIN
+
+		SELECT uf.departamento, 
+				@mes AS mes,
+				@anio AS anio,
+				SUM(p.importe) AS TotalGastos
+		FROM Pago.Pago p
+		INNER JOIN Pago.PagoAplicado pa ON p.id=pa.idPago
+		INNER JOIN Negocio.DetalleExpensa detex ON pa.idDetalleExpensa = detex.id
+		INNER JOIN Consorcio.UnidadFuncional uf ON detex.idUnidadFuncional=uf.id
+		WHERE 
+		uf.departamento=@departamento
+		AND MONTH(p.fecha)=@mes
+		AND YEAR(p.fecha)=@anio
+		GROUP BY uf.departamento
+
+
+
+END
+GO
+
 -- 4
 CREATE or alter PROCEDURE Negocio.SP_ObtenerTop5MesesGastosIngresos
 AS
