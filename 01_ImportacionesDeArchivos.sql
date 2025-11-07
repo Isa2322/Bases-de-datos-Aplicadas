@@ -133,9 +133,6 @@ FROM Operaciones.PagosConsorcioTemp AS P;
 DROP TABLE Operaciones.PagosConsorcioTemp	
 END
 GO
-/*
---------------------- COMENTO ESTO PORQUE ME TIRA ERROR-------------------------
-
 
 -- Funcion de Limpieza: Crea un nuevo lote con GO
 IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Negocio.LimpiarNumero;
@@ -188,7 +185,7 @@ BEGIN
     RETURN @FechaActual;
 END
 GO
-*/
+
 -- Funcion de Limpieza _______________________________________________________________________________
 --IF OBJECT_ID('Operaciones.LimpiarNumero') IS NOT NULL DROP FUNCTION Operaciones.LimpiarNumero;
 --GO
@@ -211,8 +208,6 @@ GO
 -- servicios.servicios.json _______________________________________________________________________________
 
 
-/*
------------- COMENTO ESTO PORQUE TAMBIEN ME TIRA ERROR-------------------------
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarGastosMensuales
 ( 
     @ruta VARCHAR(500) 
@@ -350,16 +345,13 @@ BEGIN
 
 END
 GO
-*/
 
 -- IMPORTACION DE PERSONAS ___________________________________________________________________________________________________
 
-use [Com5600G11];
-GO
 DROP PROCEDURE IF EXISTS sp_ImportarInquilinosPropietarios;
 GO
 
-CREATE PROCEDURE sp_ImportarInquilinosPropietarios
+CREATE OR ALTER PROCEDURE sp_ImportarInquilinosPropietarios
     @RutaArchivo VARCHAR(255)
 AS
 BEGIN
@@ -385,35 +377,10 @@ END
 
     PRINT 'Iniciando importaci�n de: ' + @RutaArchivo;
 
-
----------------------------- ESTO NO VA !!!!!!!------------------------
--- Se eliminan las tablas si existen
-    DROP TABLE IF EXISTS Persona.CuentaBancaria;
-    DROP TABLE IF EXISTS Persona.Persona;
-
--- Se crean de nuevo
-    CREATE TABLE Persona.Persona (
-        ID INT IDENTITY(1,1) PRIMARY KEY, 
-        DNI BIGINT,
-        Nombre VARCHAR(30),
-        Apellido VARCHAR(30),
-        CBU VARCHAR(22),
-        Telefono BIGINT,
-        Email NVARCHAR(60),
-        Tipo VARCHAR(20)
-    );
-    CREATE TABLE Persona.CuentaBancaria (
-        CBU VARCHAR(22) PRIMARY KEY,
-        Banco VARCHAR(100) NULL,
-        TitularId INT NULL,
-        CONSTRAINT FK_Cuenta_Titular
-        FOREIGN KEY (TitularId) REFERENCES Persona.Persona(ID)
-    );
-
 -- Tabla temporal para importacion
-    DROP TABLE IF EXISTS TemporalPersonas;
+    DROP TABLE IF EXISTS #TemporalPersonas;
 
-    CREATE TABLE TemporalPersonas (
+    CREATE TABLE #TemporalPersonas (
         Nombre VARCHAR(30),
         Apellido VARCHAR(30),
         DNI BIGINT,
@@ -500,7 +467,7 @@ GO
  -- FIN IMPORTACION DE PERSONAS
 
 
-
+--_____________________________________________________________________________________________________________________________________
 --IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)____________________________________________________________________________
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
 AS
@@ -554,8 +521,15 @@ BEGIN
 
 END
 GO
---____________________________________________________________________________________________________
 
+/*  PRUEBO SP
+DECLARE @rutaArchCSV VARCHAR(1000)
+SET @rutaArchCSV = 'C:\Users\camil\OneDrive\Escritorio\Facultad\BDD\datos varios(Consorcios).csv'
+EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
+*/
+
+--_____________________________________________________________________________________________________________________________________________________________
+--IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios)____________________________________________________________________________________________________
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARCHAR(1000)
 AS
 BEGIN
@@ -651,19 +625,15 @@ BEGIN
     SET NOCOUNT OFF;
 END;
 GO
+
 /*  PRUEBO SP
 DECLARE @rutaArchCSV VARCHAR(1000)
 SET @rutaArchCSV = 'C:\Users\camil\OneDrive\Escritorio\Facultad\BDD\datos varios(Proveedores).csv'
 EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
 */
 
---____________________________________________________________________________________________________
+--___________________________________________________________________________________________________________________________________________
 
---------- ESTE SOLO SIRVE SI SE IMPORTA PRIMERO QUE EL TXT DE CONSORCIOS
---------- PORQUE TENGO QUE BUSCAR EL ID DEL CONSORCIO ANTES DE CARGAR LA TABLA
---------- PERO TIENE QUE IR ANTES DE LA IMPORTACION DE UNIDADES FUNCIONALES
---------- PORQUE CARGO LOS CAMPOS NOT NULL CON 0 Y NECESITO QUE EL TXT DE UNIDADES FUNCIONALES
---------- ACTUALICE ESOS CAMPOS DESPUES
 CREATE OR ALTER PROCEDURE CargaInquilinoPropietariosUF
     @RutaArchivo VARCHAR(255)
 AS
@@ -722,30 +692,45 @@ BEGIN
     FROM #CargaDatosTemp AS cd
     JOIN Consorcio AS c ON cd.consorcio = c.nombre;
 
-    MERGE INTO UnidadFuncional AS target
-    USING #ConsorcioTemp AS source
-    ON target.CVU_CBU = source.CVU_CBUPersona
-    
-	WHEN MATCHED AND (
-        ISNULL(target.numero, '') <> ISNULL(source.numero, '') OR
-        ISNULL(target.piso, '') <> ISNULL(source.piso, '') OR
-        ISNULL(target.departamento, '') <> ISNULL(source.departamento, '') OR
-        target.consorcioId <> source.ID_Consorcio
-  	) THEN
-  	UPDATE SET
-      	target.numero = source.numero,
-      	target.piso = source.piso,
-      	target.departamento = source.departamento,
-      	target.consorcioId = source.ID_Consorcio
+    -- UPDATE para registros existentes
+    UPDATE UF
+    SET 
+        UF.numero = Ctemp.numero,
+        UF.piso = Ctemp.piso,
+        UF.departamento = Ctemp.departamento,
+        UF.consorcioId = Ctemp.ID_Consorcio
+    FROM UnidadFuncional AS UF
+    INNER JOIN #ConsorcioTemp AS Ctemp ON UF.CVU_CBU = Ctemp.CVU_CBUPersona
+    WHERE 
+        ISNULL(UF.numero, '') <> ISNULL(Ctemp.numero, '') OR
+        ISNULL(UF.piso, '') <> ISNULL(Ctemp.piso, '') OR
+        ISNULL(UF.departamento, '') <> ISNULL(Ctemp.departamento, '') OR
+        UF.consorcioId <> Ctemp.ID_Consorcio;
 
-  	WHEN NOT MATCHED BY TARGET THEN
-      	INSERT (CVU_CBU, numero, piso, departamento, consorcioId, metrosCuadrados, porcentajeExpensas)
-      	VALUES (source.CVU_CBUPersona, source.numero, source.piso, source.departamento, source.ID_Consorcio, 0, 0);
+	
+	INSERT INTO UnidadFuncional (CVU_CBU, numero, piso, departamento, consorcioId, metrosCuadrados, porcentajeExpensas)
+    SELECT 
+        Ctemp.CVU_CBUPersona, 
+        Ctemp.numero, 
+        Ctemp.piso, 
+        Ctemp.departamento, 
+        Ctemp.ID_Consorcio, 
+        0, 
+        0
+    FROM #ConsorcioTemp AS Ctemp
+    WHERE NOT EXISTS (
+        SELECT 1 
+        FROM UnidadFuncional AS UF 
+        WHERE UF.CVU_CBU = Ctemp.CVU_CBUPersona
+    );
+
 
 	DROP TABLE IF EXISTS #CargaDatosTemp;
 	DROP TABLE IF EXISTS #ConsorcioTemp;
 END
 GO
+
+
 
 -- ___________________________________________________________________________
 

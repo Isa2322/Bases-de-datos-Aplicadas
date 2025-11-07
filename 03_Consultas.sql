@@ -109,7 +109,7 @@ GO
 
 
 -- 4
-CREATE or alter PROCEDURE Operaciones.SP_Reporte4_ObtenerTop5MesesGastosIngresos
+CREATE PROCEDURE Negocio.SP_ObtenerTop5MesesGastosIngresos
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -121,7 +121,8 @@ BEGIN
             MONTH(e.fechaEmision) AS Mes,
             SUM(e.importeTotal) AS TotalGastos
         FROM (
-            -- Union de gastos ordinarios y extraordinarios
+            -- Junto los gastos ordinarios y extraordinarios, capaz que hay una forma mas prolija
+            -- Lo dejo asi por ahora pq anda
             SELECT 
                 idExpensa,
                 fechaEmision,
@@ -152,6 +153,7 @@ BEGIN
     ),
     
     -- Top 5 meses con mayores ingresos
+    -- Tomo los de detalle expensa en vez de los de expensa pq ahi estan los pagos que si se recibieron (creo)
     IngresosPorMes AS (
         SELECT 
             YEAR(de.primerVencimiento) AS Anio,
