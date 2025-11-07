@@ -206,65 +206,8 @@ GO
     Obtenga los 3 (tres) propietarios con mayor morosidad. 
     Presente información de contacto y DNI de los propietarios para que la administración los pueda 
     contactar o remitir el trámite al estudio jurídico.
-    CON XML y SIN XML, ELEGIR CUAL USAR
+    CON XML
 */
-
-CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte5_MayoresMorosos
-    @idConsorcio INT    = NULL,   -- filtra por consorcio si viene
-    @fechaDesde  DATE   = NULL,   -- incluye detalles desde esta fecha
-    @fechaHasta  DATE   = NULL    -- incluye detalles hasta esta fecha (default hoy)
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    IF @fechaHasta IS NULL SET @fechaHasta = CAST(GETDATE() AS DATE);
-
-    WITH DeudaPorDetalle AS 
-    (
-        SELECT 
-            de.id AS idDetalle,
-            de.expensaId,
-            de.idUnidadFuncional,
-            -- deuda = total a pagar - pagos recibidos (no negativa)
-            CASE 
-			--verificacion de q la deuda sea mayor a cero, si dio negativa lo dejo en cero
-                WHEN de.totalaPagar - ISNULL(de.pagosRecibidos,0) > 0 
-                THEN de.totalaPagar - ISNULL(de.pagosRecibidos,0)
-                ELSE 0 
-            END AS Deuda,
-            de.primerVencimiento
-        FROM Negocio.DetalleExpensa AS de
-        WHERE 
-        --chequeo q la fecha este entre los parametros 
-            (@fechaDesde IS NULL OR de.primerVencimiento >= @fechaDesde)
-        AND ( @fechaHasta IS NULL OR de.primerVencimiento <= @fechaHasta)
-    )
-    SELECT TOP (3)
-        p.dni AS DNI,
-        p.nombre AS Nombre,
-        p.apellido AS Apellido,
-        p.email AS Email,
-        p.telefono AS Telefono,
-        SUM(dpd.Deuda) AS MorosidadTotal
-    FROM DeudaPorDetalle AS dpd
-    INNER JOIN Consorcio.UnidadFuncional AS uf
-        ON uf.id = dpd.idUnidadFuncional
-    INNER JOIN Negocio.Expensa AS e
-        ON e.id = dpd.expensaId
-    INNER JOIN Consorcio.Consorcio AS c
-        ON c.id = uf.consorcioId
-    -- propietario se vincula por el CBU/CVU de la UF con la persona
-    INNER JOIN Consorcio. AS p
-        ON (p.CVU_CBU = uf.CVU_CBU)
-    WHERE
-        (@idConsorcio IS NULL OR c.id = @idConsorcio)
-    GROUP BY 
-        p.dni, p.nombre, p.apellido, p.email, p.telefono
-    HAVING SUM(dpd.Deuda) > 0.01
-    ORDER BY MorosidadTotal DESC;
-END;
-GO
-
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte5_MayoresMorosos_XML
     @idConsorcio INT,
