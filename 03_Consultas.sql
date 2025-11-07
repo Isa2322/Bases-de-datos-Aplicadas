@@ -111,6 +111,176 @@ END
 GO
 --=========================================================================================================
 /*
+    REPORTE 2:
+    Presente el total de recaudación por mes y departamento en formato de tabla cruzada.  
+
+*/
+
+IF OBJECT_ID('Operaciones.sp_Reporte2_RecaudacionMesDepto', 'P') IS NOT NULL
+    DROP PROCEDURE Operaciones.sp_Reporte2_RecaudacionMesDepto
+GO
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte2_RecaudacionMesDepto
+    @idConsorcio INT,   
+    @anio INT,    
+    @incluirSinPagos BIT = 0 
+AS
+BEGIN
+    SET NOCOUNT ON
+    /* 
+       Base: pagos aplicados a detalles de expensa.
+       Camino: PagoAplicado -> Pago(fecha) -> DetalleExpensa -> UF(departamento) -> Consorcio.
+       Tomamos solo los pagos del año solicitado (@anio).
+    */
+    WITH Recaudacion AS
+    (
+        SELECT 
+            uf.departamento,
+            MONTH(p.fecha) AS mes,
+            SUM(pa.importeAplicado) AS importe
+        FROM Pago.PagoAplicado AS pa
+        INNER JOIN Pago.Pago            AS p  ON p.id = pa.idPago
+        INNER JOIN Negocio.DetalleExpensa AS de ON de.id = pa.idDetalleExpensa
+        INNER JOIN Consorcio.UnidadFuncional AS uf ON uf.id = de.idUnidadFuncional
+        INNER JOIN Consorcio.Consorcio       AS c  ON c.id = uf.consorcioId
+        WHERE c.id = @idConsorcio
+          AND YEAR(p.fecha) = @anio
+        GROUP BY uf.departamento, MONTH(p.fecha)
+    ),
+    -- Si se pide incluir UFs sin pagos, generamos todas las combinaciones depto x mes con 0
+    DeptoMes AS
+    (
+        SELECT DISTINCT uf.departamento
+        FROM Consorcio.UnidadFuncional uf
+        WHERE uf.consorcioId = @idConsorcio
+    ),
+    CalendarioMes AS
+    (
+        SELECT 1 AS mes UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
+        UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8
+        UNION ALL SELECT 9 UNION ALL SELECT 10 UNION ALL SELECT 11 UNION ALL SELECT 12
+    ),
+    Base AS
+    (
+        SELECT 
+            COALESCE(r.departamento, d.departamento) AS departamento,
+            m.mes,
+            COALESCE(r.importe, 0) AS importe
+        FROM (
+            SELECT * FROM Recaudacion
+            UNION ALL
+            SELECT NULL, NULL, NULL  -- si @incluirSinPagos=0, ignoraremos esta rama
+        ) r
+        RIGHT JOIN (SELECT * FROM DeptoMes CROSS JOIN CalendarioMes) x
+            ON (@incluirSinPagos = 1) 
+           AND r.departamento = x.departamento 
+           AND r.mes = x.mes
+        RIGHT JOIN DeptoMes d ON d.departamento = COALESCE(x.departamento, r.departamento)
+        RIGHT JOIN CalendarioMes m ON m.mes = COALESCE(x.mes, r.mes)
+        WHERE (@incluirSinPagos = 1) OR (r.departamento IS NOT NULL)
+    )
+    SELECT 
+        departamento,
+        SUM(CASE WHEN mes = 1  THEN importe ELSE 0 END) AS Ene,
+        SUM(CASE WHEN mes = 2  THEN importe ELSE 0 END) AS Feb,
+        SUM(CASE WHEN mes = 3  THEN importe ELSE 0 END) AS Mar,
+        SUM(CASE WHEN mes = 4  THEN importe ELSE 0 END) AS Abr,
+        SUM(CASE WHEN mes = 5  THEN importe ELSE 0 END) AS May,
+        SUM(CASE WHEN mes = 6  THEN importe ELSE 0 END) AS Jun,
+        SUM(CASE WHEN mes = 7  THEN importe ELSE 0 END) AS Jul,
+        SUM(CASE WHEN mes = 8  THEN importe ELSE 0 END) AS Ago,
+        SUM(CASE WHEN mes = 9  THEN importe ELSE 0 END) AS Sep,
+        SUM(CASE WHEN mes = 10 THEN importe ELSE 0 END) AS Oct,
+        SUM(CASE WHEN mes = 11 THEN importe ELSE 0 END) AS Nov,
+        SUM(CASE WHEN mes = 12 THEN importe ELSE 0 END) AS Dic,
+        SUM(importe) AS Total
+    FROM Base
+    GROUP BY departamento
+    ORDER BY departamento;
+END
+GO
+
+--=========================================================================================================
+/*
+    REPORTE 3:
+    Presente un cuadro cruzado con la recaudación total desagregada según su procedencia (ordinario, extraordinario, etc.) según el periodo. 
+*/
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte3_RecaudacionPorProcedencia_Crosstab
+    @idConsorcio INT = NULL, 
+    @fechaDesde  DATE = NULL, 
+    @fechaHasta  DATE = NULL 
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @fechaHasta IS NULL SET @fechaHasta = CAST(GETDATE() AS DATE)
+
+    /*
+       Base: pagos aplicados a DetalleExpensa.
+       Para cada detalle calculamos pesos (ordinario, extraordinario, mora) y
+       distribuimos proporcionalmente cada pago aplicado según esos pesos.
+       Luego agregamos por Año-Mes (de la fecha del pago).
+    */
+    WITH Pagos AS
+    (
+        SELECT 
+            pa.idPago,
+            CAST(p.fecha AS DATE) AS fechaPago,
+            YEAR(p.fecha) AS anio,
+            MONTH(p.fecha) AS mes,
+            pa.importeAplicado,
+            de.prorrateoOrdinario,
+            de.prorrateoExtraordinario,
+            de.interesMora,
+            uf.consorcioId
+        FROM Pago.PagoAplicado AS pa
+        INNER JOIN Pago.Pago           AS p  ON p.id = pa.idPago
+        INNER JOIN Negocio.DetalleExpensa AS de ON de.id = pa.idDetalleExpensa
+        INNER JOIN Consorcio.UnidadFuncional AS uf ON uf.id = de.idUnidadFuncional
+        WHERE (@idConsorcio IS NULL OR uf.consorcioId = @idConsorcio)
+          AND (@fechaDesde  IS NULL OR CAST(p.fecha AS DATE) >= @fechaDesde)
+          AND (@fechaHasta  IS NULL OR CAST(p.fecha AS DATE) <= @fechaHasta)
+    ),
+    Distribuido AS
+    (
+        SELECT
+            anio, mes,
+            -- pesos no negativos
+            CAST(ISNULL(prorrateoOrdinario,0)     AS DECIMAL(18,6)) AS wOrd,
+            CAST(ISNULL(prorrateoExtraordinario,0)AS DECIMAL(18,6)) AS wExt,
+            CAST(ISNULL(interesMora,0)            AS DECIMAL(18,6)) AS wMora,
+            importeAplicado
+        FROM Pagos
+    ),
+    Partes AS
+    (
+        SELECT
+            anio, mes,
+            CASE WHEN (wOrd + wExt + wMora) > 0 
+                 THEN importeAplicado * (wOrd / (wOrd + wExt + wMora))
+                 ELSE 0 END AS rec_Ordinario,
+            CASE WHEN (wOrd + wExt + wMora) > 0 
+                 THEN importeAplicado * (wExt / (wOrd + wExt + wMora))
+                 ELSE 0 END AS rec_Extraordinario,
+            CASE WHEN (wOrd + wExt + wMora) > 0 
+                 THEN importeAplicado * (wMora / (wOrd + wExt + wMora))
+                 ELSE 0 END AS rec_Mora
+        FROM Distribuido
+    )
+    SELECT 
+        CONCAT(anio, '-', RIGHT('00'+CAST(mes AS VARCHAR(2)),2)) AS Periodo,
+        SUM(rec_Ordinario)     AS Ordinario,
+        SUM(rec_Extraordinario)AS Extraordinario,
+        SUM(rec_Mora)          AS Mora,
+        SUM(rec_Ordinario + rec_Extraordinario + rec_Mora) AS Total
+    FROM Partes
+    GROUP BY anio, mes
+    ORDER BY anio, mes;
+END
+GO
+
+--=========================================================================================================
+/*
     REPORTE 4:
     Obtenga los 5 (cinco) meses de mayores gastos y los 5 (cinco) de mayores ingresos.  
 */
