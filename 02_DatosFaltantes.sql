@@ -88,7 +88,7 @@ BEGIN
 
         -- Número actual de cocheras en este consorcio
         SET @maxNum = ISNULL(
-            (SELECT MAX(numero) FROM Consorcio.Cochera c
+            (SELECT MAX(c.numero) FROM Consorcio.Cochera c
              INNER JOIN Consorcio.UnidadFuncional uf ON uf.id = c.unidadFuncionalId
              WHERE uf.consorcioId = @idConsorcio),
         0);
@@ -144,7 +144,7 @@ BEGIN
         );
 
         SET @maxNum = ISNULL(
-            (SELECT MAX(numero) FROM Consorcio.Baulera b
+            (SELECT MAX(b.numero) FROM Consorcio.Baulera b
              INNER JOIN Consorcio.UnidadFuncional uf ON uf.id = b.unidadFuncionalId
              WHERE uf.consorcioId = @idConsorcio),
         0);
