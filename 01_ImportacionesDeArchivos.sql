@@ -494,189 +494,228 @@ GO
 
 --==================================================================================================================
 --IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios en CSV)
-CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
-AS
-BEGIN
-    --esto es para verificar q la ruta venga bien escrita
-       IF CHARINDEX('''', @rutaArch) > 0 OR
-       CHARINDEX('--', @rutaArch) > 0 OR
-       CHARINDEX('/*', @rutaArch) > 0 OR 
-       CHARINDEX('*/', @rutaArch) > 0 OR
-       CHARINDEX(';', @rutaArch) > 0
-    BEGIN
-        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
-        RETURN;
-    END
-	--armo una temporal para guardar los datos
-	CREATE TABLE #TempConsorciosBulk 
-	( 
-		consorcioCSV VARCHAR(100),
-        nombreCSV VARCHAR(100),
-        direccionCSV VARCHAR(200),
-		cantUnidadesCSV INT,
-        superficieTotalCSV DECIMAL(10, 2)
-    );
-
-	--sql dinamico para encontrar la ruta
-	DECLARE @sqlBulk VARCHAR(1000)
-
-	SET @sqlBulk = 
-			'
-            BULK INSERT #TempConsorciosBulk
-            FROM ''' + @rutaArch + '''
-            WITH (
-                FIELDTERMINATOR = '';'',
-                ROWTERMINATOR = ''\n'',
-                FIRSTROW = 2,
-                CODEPAGE = ''65001''   
-            )
-			'
-    EXEC(@sqlBulk)
-	--Dsps de esto ya tendria todo insertado en la tabla temporal
-	--Ahora tengo q pasar las cosas a la tabla real
-	--Esta actualizacion se hace comparando con el nombre, si no encuentra una coincidencia del nombre en la tabla considera q tenes un consorcio nuevo y lo inserta
-	UPDATE Consorcio
-    SET direccion = Fuente.direccionCSV, metrosCuadradosTotal = Fuente.superficieTotalCSV
-    FROM Consorcio AS Final INNER JOIN #TempConsorciosBulk AS Fuente
-    ON Final.nombre = Fuente.nombreCSV
-    INSERT INTO Consorcio 
-	(
-         nombre,
-         direccion,
-         metrosCuadradosTotal
-    )
-    SELECT Fuente.nombreCSV, Fuente.direccionCSV, Fuente.superficieTotalCSV
-    FROM #TempConsorciosBulk AS Fuente
-	WHERE NOT EXISTS 
-			(
-                SELECT 1
-                FROM Consorcio AS Final
-                WHERE Final.nombre = Fuente.nombreCSV AND Final.direccion = Fuente.direccionCSV
-            ) --basicamente aca se fija q para actualizar ya exista un consorcio con el mismo nombre y direccion y sino inserta uno nuevo
-
-END
-GO
-
-/*  PRUEBO SP
-DECLARE @rutaArchCSV VARCHAR(1000)
-SET @rutaArchCSV = 'C:\Users\camil\OneDrive\Escritorio\Facultad\BDD\datos varios(Consorcios).csv'
-EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
-*/
-
---==================================================================================================================
---IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios en CSV)
-
-CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARCHAR(1000)
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios
+    @rutaArch VARCHAR(1000)
 AS
 BEGIN
     SET NOCOUNT ON;
-    --esto es para verificar q la ruta venga bien escrita
-       IF CHARINDEX('''', @rutaArch) > 0 OR
-       CHARINDEX('--', @rutaArch) > 0 OR
-       CHARINDEX('/*', @rutaArch) > 0 OR 
-       CHARINDEX('*/', @rutaArch) > 0 OR
-       CHARINDEX(';', @rutaArch) > 0
+
+    -- Validación básica de ruta
+    IF CHARINDEX('''', @rutaArch) > 0 OR CHARINDEX('--', @rutaArch) > 0 OR
+       CHARINDEX('/*', @rutaArch) > 0 OR CHARINDEX('*/', @rutaArch) > 0 OR
+       CHARINDEX(';',  @rutaArch) > 0
     BEGIN
         RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
         RETURN;
-    END
-    --tabla para el bulk insert del archivo
-    CREATE TABLE #TempProveedoresGastoOriginal 
+    END;
+
+    -- Staging
+    IF OBJECT_ID('tempdb..#TempConsorciosBulk') IS NOT NULL DROP TABLE #TempConsorciosBulk;
+    CREATE TABLE #TempConsorciosBulk
     (
-        tipoGasto VARCHAR(100),
-        columnaMixta VARCHAR(200),    
-        detalleAlternativo VARCHAR(200),
-        nomConsorcio VARCHAR(100)  
-    )
+        consorcioCSV        VARCHAR(100) NULL, -- si no lo usás, lo dejamos
+        nombreCSV           VARCHAR(200) NULL,
+        direccionCSV        VARCHAR(300) NULL,
+        cantUnidadesCSV     INT          NULL,
+        superficieTotalCSV  DECIMAL(18,2) NULL
+    );
 
-    --tabla para los datos procesados
-    CREATE TABLE #TempProveedoresGastoProcesado 
-    (
-        tipoGasto VARCHAR(100),
-        nomEmpresa VARCHAR(200),    
-        detalle VARCHAR(200),
-        nomConsorcio VARCHAR(100)  
-    )
+    -- BULK (LF explícito para evitar \r pegado; UTF-8)
+    DECLARE @sqlBulk NVARCHAR(MAX) = N'
+        BULK INSERT #TempConsorciosBulk
+        FROM ''' + @rutaArch + N'''
+        WITH (
+            FIELDTERMINATOR = '';'',
+            ROWTERMINATOR   = ''0x0a'',
+            FIRSTROW        = 2,
+            CODEPAGE        = ''65001'',
+            TABLOCK, KEEPNULLS
+        );';
+    EXEC(@sqlBulk);
 
-    BEGIN TRY
-        --bulkeo asi como vino el archivo (sql dinamico para no hardcodear la ruta)
-        DECLARE @sqlBulk VARCHAR(2000);
-        SET @sqlBulk = '
-            BULK INSERT #TempProveedoresGastoOriginal
-            FROM ''' + @rutaArch + '''
-            WITH (
-                FIELDTERMINATOR = '';'',
-                ROWTERMINATOR = ''\n'',
-                FIRSTROW = 2, -- Asumo que tu CSV tiene encabezados
-                CODEPAGE = ''65001''
-            )'
-        EXEC (@sqlBulk)
+    -- Normalización: quitar CR (CHAR(13)), BOM, y TRIM
+    UPDATE #TempConsorciosBulk
+    SET
+        nombreCSV          = LTRIM(RTRIM(REPLACE(REPLACE(nombreCSV,    CHAR(13), ''), NCHAR(65279), ''))),
+        direccionCSV       = LTRIM(RTRIM(REPLACE(REPLACE(direccionCSV, CHAR(13), ''), NCHAR(65279), ''))),
+        consorcioCSV       = LTRIM(RTRIM(REPLACE(REPLACE(consorcioCSV, CHAR(13), ''), NCHAR(65279), '')));
 
-        --procesamiento para extraer el detalle o poner lo q dice en la 3 columna
-        INSERT INTO #TempProveedoresGastoProcesado 
-        (
-            tipoGasto,
-            nomEmpresa,
-            detalle,
-            nomConsorcio
-        )
-        SELECT tipoGasto,
-            -- el segundo campo (tipo gasto) esta en la columna 2 antes del guion, lo extraigo
-            CASE
-                WHEN CHARINDEX('-', columnaMixta) > 0 
-                --si encuentra un - devuelve algo mayor a cero
-                THEN TRIM(LEFT(columnaMixta, CHARINDEX('-', columnaMixta) - 1))
-                --le indico con trim hasta donde cortar el dato, desde la izquierda hasta donde este el guion
-                ELSE columnaMixta 
-                --si no hay guion se usa el nombre en la columna nomas
-            END AS nomEmpresa,
-            -- el tercer campo (detalle) es o lo q viene dsps del guion o la columna 3
-            CASE
-                WHEN CHARINDEX('-', columnaMixta) > 0 
-                THEN TRIM(RIGHT(columnaMixta, LEN(columnaMixta) - CHARINDEX('-', columnaMixta)))
-                --si hay guion corto lo q haya a la derecha de el y ese es el detalle
-                ELSE detalleAlternativo 
-                -- si no hay guion, el detalle es la col 3
-            END AS detalle,
-            nomConsorcio
-        FROM
-            #TempProveedoresGastoOriginal
-        
-        --guardo en la tabla q corresponde usando la tabla procesada
-        UPDATE Negocio.GastoOrdinario
-        SET
-            GastoOrdinario.nombreEmpresaoPersona = T_Proc.nomEmpresa,
-            GastoOrdinario.detalle = T_Proc.detalle
-        FROM
-            Negocio.GastoOrdinario
-        JOIN
-            Negocio.Expensa ON GastoOrdinario.idExpensa = Expensa.id
-        JOIN
-            Consorcio.Consorcio ON Expensa.consorcio_id = Consorcio.id
-        JOIN
-            -- join con tabla procesada
-            #TempProveedoresGastoProcesado AS T_Proc 
-            -- Usamos el tipoGasto que extrajimos para el JOIN
-            ON GastoOrdinario.tipoServicio = T_Proc.tipoGasto
-            AND Consorcio.nombre = T_Proc.nomConsorcio;
+    -- ACTUALIZAR existentes (match por nombre)
+    UPDATE c
+    SET
+        c.direccion       = ISNULL(t.direccionCSV, c.direccion),
+        c.metrosCuadradosTotal = ISNULL(t.superficieTotalCSV, c.metrosCuadradosTotal)
+    FROM Consorcio.Consorcio AS c
+    INNER JOIN #TempConsorciosBulk AS t
+        ON LTRIM(RTRIM(c.nombre)) = LTRIM(RTRIM(t.nombreCSV));
 
-    END TRY
-    BEGIN CATCH
-        PRINT 'Error durante la importacion de datos de Proveedores:';
-        PRINT ERROR_MESSAGE();
-    END CATCH
-    -- limpio las temps
-    DROP TABLE #TempProveedoresGastoOriginal;
-    DROP TABLE #TempProveedoresGastoProcesado;
+    -- INSERTAR nuevos (si no existe el nombre)
+    INSERT INTO Consorcio.Consorcio (nombre, direccion, metrosCuadradosTotal)
+    SELECT
+        t.nombreCSV,
+        t.direccionCSV,
+        t.superficieTotalCSV
+    FROM #TempConsorciosBulk AS t
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM Consorcio.Consorcio AS c
+        WHERE LTRIM(RTRIM(c.nombre)) = LTRIM(RTRIM(t.nombreCSV))
+    );
+
+    -- Limpieza
+    DROP TABLE #TempConsorciosBulk;
+
     SET NOCOUNT OFF;
 END;
 GO
 
 /*  PRUEBO SP
-DECLARE @rutaArchCSV VARCHAR(1000)
-SET @rutaArchCSV = 'C:\Users\camil\OneDrive\Escritorio\Facultad\BDD\datos varios(Proveedores).csv'
-EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
+EXEC Operaciones.sp_ImportarDatosConsorcios @rutaArch = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\consorcios\datos varios(Consorcios).csv'
+SELECT * FROM Consorcio.Consorcio
 */
+
+--==================================================================================================================
+--IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios en CSV)
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores
+    @rutaArch VARCHAR(1000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- sanity check de ruta
+    IF CHARINDEX('''', @rutaArch) > 0 OR
+       CHARINDEX('--', @rutaArch) > 0 OR
+       CHARINDEX('/*', @rutaArch) > 0 OR 
+       CHARINDEX('*/', @rutaArch) > 0 OR
+       CHARINDEX(';',  @rutaArch) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END;
+
+    -- staging original
+    IF OBJECT_ID('tempdb..#TempProveedoresGastoOriginal') IS NOT NULL DROP TABLE #TempProveedoresGastoOriginal;
+    CREATE TABLE #TempProveedoresGastoOriginal
+    (
+        tipoGasto          VARCHAR(200) NULL,
+        columnaMixta       VARCHAR(400) NULL,
+        detalleAlternativo VARCHAR(400) NULL,
+        nomConsorcio       VARCHAR(200) NULL
+    );
+
+    -- staging procesado
+    IF OBJECT_ID('tempdb..#TempProveedoresGastoProcesado') IS NOT NULL DROP TABLE #TempProveedoresGastoProcesado;
+    CREATE TABLE #TempProveedoresGastoProcesado
+    (
+        tipoGasto    VARCHAR(200),
+        nomEmpresa   VARCHAR(400),
+        detalle      VARCHAR(400),
+        nomConsorcio VARCHAR(200)
+    );
+
+    BEGIN TRY
+        ----------------------------------------------------------
+        -- BULK INSERT
+        ----------------------------------------------------------
+        DECLARE @sqlBulk NVARCHAR(MAX) = N'
+            BULK INSERT #TempProveedoresGastoOriginal
+            FROM ''' + @rutaArch + N'''
+            WITH (
+                FIELDTERMINATOR = '';'',
+                ROWTERMINATOR   = ''0x0a'',  -- usa LF explícito; evitamos problemas con \r\n
+                FIRSTROW        = 2,         -- saltear encabezado
+                CODEPAGE        = ''65001'', -- UTF-8
+                TABLOCK,
+                KEEPNULLS
+            );';
+
+        EXEC(@sqlBulk);
+
+        DECLARE @bulkRows INT = @@ROWCOUNT;
+        IF @bulkRows = 0
+        BEGIN
+            RAISERROR('No se importaron filas desde el CSV. Verifique ruta, separador ; y encabezado.', 16, 1);
+            RETURN;
+        END
+
+        ----------------------------------------------------------
+        -- NORMALIZACIÓN (trim + remover CR y BOM)
+        ----------------------------------------------------------
+        -- quitar CR (CHAR(13)) final que puede quedar por \r\n
+        UPDATE #TempProveedoresGastoOriginal
+        SET
+            tipoGasto          = REPLACE(tipoGasto, CHAR(13), ''),
+            columnaMixta       = REPLACE(columnaMixta, CHAR(13), ''),
+            detalleAlternativo = REPLACE(detalleAlternativo, CHAR(13), ''),
+            nomConsorcio       = REPLACE(nomConsorcio, CHAR(13), '');
+
+        -- trim + quitar posible BOM en la primer columna si existiera
+        UPDATE #TempProveedoresGastoOriginal
+        SET
+            tipoGasto    = LTRIM(RTRIM(REPLACE(tipoGasto, NCHAR(65279), ''))),  -- NCHAR(65279) = BOM UTF-8
+            columnaMixta = LTRIM(RTRIM(columnaMixta)),
+            detalleAlternativo = LTRIM(RTRIM(detalleAlternativo)),
+            nomConsorcio = LTRIM(RTRIM(nomConsorcio));
+
+        ----------------------------------------------------------
+        -- PROCESAR (separar empresa/detalle)
+        ----------------------------------------------------------
+        INSERT INTO #TempProveedoresGastoProcesado (tipoGasto, nomEmpresa, detalle, nomConsorcio)
+        SELECT 
+            LTRIM(RTRIM(tipoGasto)) AS tipoGasto,
+            CASE
+                WHEN CHARINDEX('-', columnaMixta) > 0 
+                    THEN LTRIM(RTRIM(LEFT(columnaMixta, CHARINDEX('-', columnaMixta) - 1)))
+                ELSE LTRIM(RTRIM(columnaMixta))
+            END AS nomEmpresa,
+            CASE
+                WHEN CHARINDEX('-', columnaMixta) > 0 
+                    THEN LTRIM(RTRIM(SUBSTRING(columnaMixta, CHARINDEX('-', columnaMixta) + 1, 400)))
+                ELSE LTRIM(RTRIM(detalleAlternativo))
+            END AS detalle,
+            LTRIM(RTRIM(nomConsorcio)) AS nomConsorcio
+        FROM #TempProveedoresGastoOriginal;
+
+        UPDATE g
+        SET 
+            g.nombreEmpresaoPersona = p.nomEmpresa,
+            g.detalle               = p.detalle
+        FROM Negocio.GastoOrdinario AS g
+        JOIN Negocio.Expensa       e  ON e.id = g.idExpensa
+        JOIN Consorcio.Consorcio   c  ON c.id = e.consorcio_id
+        JOIN #TempProveedoresGastoProcesado p
+             ON p.tipoGasto    = LTRIM(RTRIM(g.tipoServicio))
+            AND p.nomConsorcio = LTRIM(RTRIM(c.nombre));
+
+        DECLARE @upd INT = @@ROWCOUNT;
+        PRINT CONCAT('Filas importadas del CSV: ', @bulkRows);
+        PRINT CONCAT('Filas actualizadas en GastoOrdinario: ', @upd);
+    END TRY
+    BEGIN CATCH
+        PRINT 'Error durante la importacion de datos de Proveedores:';
+        PRINT ERROR_MESSAGE();
+    END CATCH;
+
+    DROP TABLE IF EXISTS #TempProveedoresGastoProcesado;
+    DROP TABLE IF EXISTS #TempProveedoresGastoOriginal;
+
+    SET NOCOUNT OFF;
+END;
+GO
+
+/*  PRUEBO SP
+EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\consorcios\datos varios(Proveedores).csv'
+SELECT go.idGasto, c.nombre AS Consorcio, go.tipoServicio, go.nombreEmpresaoPersona, go.detalle
+FROM Negocio.GastoOrdinario go
+JOIN Negocio.Expensa e ON e.id = go.idExpensa
+JOIN Consorcio.Consorcio c ON c.id = e.consorcio_id
+WHERE e.id = 9001
+ORDER BY go.idGasto;
+
+*/
+
+
 
 --===============================================================================================================
 -- IMPORTACION DIRECTAMENTE DESDE EL EXCEL PARA CONSORCIOS
@@ -716,7 +755,7 @@ BEGIN
             CAST([Direccion] AS VARCHAR(300)) AS direccion,
             TRY_CAST([SuperficieTotal] AS DECIMAL(18,2)) AS superficieTotal
         FROM OPENROWSET(
-            ''Microsoft.ACE.OLEDB.12.0'',
+            ''Microsoft.ACE.OLEDB.16.0'',
             ''Excel 12.0;HDR=YES;IMEX=1;Database=' + @rutaExcel + ''',
             ''SELECT * FROM [Consorcios$]''
         );';
@@ -749,6 +788,8 @@ BEGIN
     DROP TABLE #TempConsorcios;
 END;
 GO
+
+EXEC Operaciones.sp_ImportarDatosConsorcios_excel @rutaExcel = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\consorcios\datos varios.xlsl'
 --===============================================================================================================
 -- IMPORTACION DIRECTAMENTE DESDE EL EXCEL PARA PROVEEDORES
 
@@ -790,7 +831,7 @@ BEGIN
             CAST([DetalleAlt]   AS VARCHAR(200)),
             CAST([Consorcio]    AS VARCHAR(100))
         FROM OPENROWSET(
-            ''Microsoft.ACE.OLEDB.12.0'',
+            ''Microsoft.ACE.OLEDB.16.0'',
             ''Excel 12.0;HDR=YES;IMEX=1;Database=' + @rutaExcel + ''',
             ''SELECT * FROM [Proveedores$]''
         );';
