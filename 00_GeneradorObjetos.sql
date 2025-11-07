@@ -125,36 +125,6 @@ CREATE TABLE Consorcio.TipoRol (
 );
 GO
 
--- Tabla: Persona
-IF OBJECT_ID('Consorcio.Persona', 'U') IS NOT NULL
-    DROP TABLE Consorcio.Persona;
-GO
-
-CREATE TABLE Consorcio.Persona (
-    idPersona INT IDENTITY(1,1) PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL,
-    apellido VARCHAR(100) NOT NULL,
-    dni VARCHAR(20) NOT NULL,
-    email VARCHAR(150),
-    telefono VARCHAR(50),
-    CVU_CBU VARCHAR(22),
-    idTipoRol INT NOT NULL,
-    CONSTRAINT FK_Consorcio_TipoRol FOREIGN KEY (idTipoRol) 
-        REFERENCES Consorcio.TipoRol(idTipoRol)
-);
-GO
-
-
-
-IF OBJECT_ID(N'Consorcio.CuentaBancaria','U') IS NULL
-BEGIN
-	CREATE TABLE Consorcio.CuentaBancaria(
-		CVU_CBU CHAR(22) PRIMARY KEY,
-		nombreTitular VARCHAR(50),
-		saldo DECIMAL(10,2)
-		)
-END
-GO
 
 --PERSONA
 IF OBJECT_ID('Consorcio.Persona', 'U') IS NOT NULL
@@ -231,8 +201,8 @@ GO
 BEGIN
     CREATE TABLE Negocio.Expensa
     (
-        id INT PRIMARY KEY,
-        consorcio_id INT,
+        id INT PRIMARY KEY IDENTITY(1,1),
+        consorcioId INT,
         saldoAnterior DECIMAL(10,2),
         ingresosEnTermino DECIMAL(10,2),
         ingresosAdeudados DECIMAL(10,2),
@@ -241,7 +211,7 @@ BEGIN
         saldoCierre DECIMAL(10,2),
         fechaPeriodoAnio INT NULL, 
         fechaPeriodoMes INT NULL,  
-        FOREIGN KEY (consorcio_id) REFERENCES Consorcio.Consorcio(id)
+        FOREIGN KEY (consorcioId) REFERENCES Consorcio.Consorcio(id)
     )
 END
 GO
@@ -276,7 +246,8 @@ BEGIN
     CREATE TABLE Negocio.GastoOrdinario 
     (
         idGasto INT PRIMARY KEY IDENTITY,
-        idExpensa INT NOT NULL, 
+        idExpensa INT,
+		consorcioId int,
         nombreEmpresaoPersona VARCHAR(200) NULL,
         nroFactura CHAR(10) NOT NULL, -- CHAR(10) y NOT NULL
         fechaEmision DATE NULL,
@@ -293,7 +264,8 @@ BEGIN
         ),
         
         -- Llave Foránea a Negocio.Expensa
-        CONSTRAINT FK_GastoOrd_Expensa FOREIGN KEY (idExpensa) REFERENCES Negocio.Expensa(id)
+        CONSTRAINT FK_GastoOrd_Expensa FOREIGN KEY (idExpensa) REFERENCES Negocio.Expensa(id),
+	    CONSTRAINT FK_Id_Consorcio FOREIGN KEY (consorcioId) REFERENCES Consorcio.Consorcio(id)
     )
 END
 GO
@@ -306,7 +278,8 @@ BEGIN
     CREATE TABLE Negocio.GastoExtraordinario 
     (
         idGasto INT PRIMARY KEY IDENTITY,
-        idExpensa INT NOT NULL, 
+        idExpensa INT, 
+		consorcioId int,
         nombreEmpresaoPersona VARCHAR(200) NULL,
         nroFactura VARCHAR(50) NULL,
         fechaEmision DATE NULL,
@@ -315,7 +288,8 @@ BEGIN
         esPagoTotal BIT NOT NULL,
         nroCuota INT NULL,
         totalCuota DECIMAL(18, 2) NOT NULL,
-        CONSTRAINT FK_GastoExt_Expensa FOREIGN KEY (idExpensa) REFERENCES Negocio.Expensa(id) 
+        CONSTRAINT FK_GastoExt_Expensa FOREIGN KEY (idExpensa) REFERENCES Negocio.Expensa(id),
+		CONSTRAINT FK_Id_Consorcio2 FOREIGN KEY (consorcioId) REFERENCES Consorcio.Consorcio(id)
     )
 END
 GO
@@ -345,7 +319,7 @@ GO
 BEGIN
     CREATE TABLE Negocio.DetalleExpensa
     (
-        id INT PRIMARY KEY,
+        id INT PRIMARY KEY IDENTITY(1,1),
         expensaId INT,
         idUnidadFuncional INT,
         prorrateoOrdinario DECIMAL(10,2),

@@ -292,16 +292,15 @@ GO
     Obtenga los 5 (cinco) meses de mayores gastos y los 5 (cinco) de mayores ingresos.  
 */
 
-IF OBJECT_ID('Operaciones.sp_Reporte4_MayoresGI', 'P') IS NOT NULL
-    DROP PROCEDURE Operaciones.sp_Reporte4_MayoresGI
-GO
-
-CREATE PROCEDURE Operaciones.sp_Reporte4_MayoresGI
+CREATE PROCEDURE Negocio.SP_ObtenerTopNMesesGastosIngresos
+    @TopN INT = 5,
+    @Anio INT = NULL,
+    @ConsorcioID INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
     
-    -- Top 5 meses con mayores gastos
+    -- Top N meses con mayores gastos
     WITH GastosPorMes AS (
         SELECT 
             YEAR(e.fechaEmision) AS Anio,
@@ -311,25 +310,33 @@ BEGIN
             -- Junto los gastos ordinarios y extraordinarios, capaz que hay una forma mas prolija
             -- Lo dejo asi por ahora pq anda
             SELECT 
-                idExpensa,
-                fechaEmision,
-                importeTotal
-            FROM Negocio.GastoOrdinario
-            WHERE fechaEmision IS NOT NULL
+                ngo.idExpensa,
+                ngo.fechaEmision,
+                ngo.importeTotal
+            FROM Negocio.GastoOrdinario as ngo
+            WHERE ngo.fechaEmision IS NOT NULL
             
             UNION ALL
             
             SELECT 
-                idExpensa,
-                fechaEmision,
-                importeTotal
-            FROM Negocio.GastoExtraordinario
-            WHERE fechaEmision IS NOT NULL
-        ) e
+                ge.idExpensa,
+                ge.fechaEmision,
+                ge.importeTotal
+            FROM Negocio.GastoExtraordinario as ge
+            WHERE ge.fechaEmision IS NOT NULL
+        ) as e
+
+        INNER JOIN Negocio.Expensa AS exp ON e.idExpensa = exp.id
+        WHERE 
+            e.fechaEmision IS NOT NULL
+            -- Filtros agragados
+            AND (@Anio IS NULL OR YEAR(e.fechaEmision) = @Anio)
+            AND (@ConsorcioID IS NULL OR exp.consorcio_id = @ConsorcioID)
+
         GROUP BY YEAR(e.fechaEmision), MONTH(e.fechaEmision)
     ),
-    Top5Gastos AS (
-        SELECT TOP 5
+    TopNGastos AS (
+        SELECT TOP (@TopN)
             Anio,
             Mes,
             DATENAME(MONTH, DATEFROMPARTS(Anio, Mes, 1)) AS NombreMes,
@@ -339,20 +346,24 @@ BEGIN
         ORDER BY TotalGastos DESC
     ),
     
-    -- Top 5 meses con mayores ingresos
+    -- Top N meses con mayores ingresos
     -- Tomo los de detalle expensa en vez de los de expensa pq ahi estan los pagos que si se recibieron (creo)
     IngresosPorMes AS (
         SELECT 
-            YEAR(de.primerVencimiento) AS Anio,
-            MONTH(de.primerVencimiento) AS Mes,
+            exp.fechaPeriodoAnio AS Anio,
+            exp.fechaPeriodoMes AS Mes,
             SUM(de.pagosRecibidos) AS TotalIngresos
-        FROM Negocio.DetalleExpensa de
-        WHERE de.primerVencimiento IS NOT NULL
+        FROM Negocio.DetalleExpensa AS de
+        INNER JOIN Negocio.Expensa AS exp ON de.expensaId = exp.id
+        WHERE
+            de.primerVencimiento IS NOT NULL
             AND de.pagosRecibidos > 0
-        GROUP BY YEAR(de.primerVencimiento), MONTH(de.primerVencimiento)
+            AND (@Anio IS NULL OR YEAR(de.primerVencimiento) = @Anio)
+            AND (@ConsorcioID IS NULL OR exp.consorcio_id = @ConsorcioID)
+        GROUP BY exp.fechaPeriodoAnio, exp.fechaPeriodoMes
     ),
-    Top5Ingresos AS (
-        SELECT TOP 5
+    TopNIngresos AS (
+        SELECT TOP (@TopN)
             Anio,
             Mes,
             DATENAME(MONTH, DATEFROMPARTS(Anio, Mes, 1)) AS NombreMes,
@@ -369,7 +380,7 @@ BEGIN
         Mes,
         NombreMes,
         TotalGastos AS Monto
-    FROM Top5Gastos
+    FROM TopNGastos
     
     UNION ALL
     
@@ -379,7 +390,7 @@ BEGIN
         Mes,
         NombreMes,
         Monto
-    FROM Top5Ingresos
+    FROM TopNIngresos
     
     ORDER BY Tipo DESC, Monto DESC;
     
