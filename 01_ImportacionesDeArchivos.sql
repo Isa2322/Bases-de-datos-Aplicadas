@@ -136,7 +136,6 @@ GO
 
 -- Funcion de Limpieza: Crea un nuevo lote con GO
 IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Negocio.LimpiarNumero;
-GO
 CREATE or alter FUNCTION Operaciones.ObtenerDiaHabil
 (
     @Año INT,
@@ -347,28 +346,33 @@ BEGIN
 END
 GO
 
-
---____________________________________________________________________________________________________________________________
 -- IMPORTACION DE PERSONAS ___________________________________________________________________________________________________
 
-use [Com5600G11];
+DROP PROCEDURE IF EXISTS sp_ImportarInquilinosPropietarios;
 GO
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarInquilinosPropietarios
+CREATE OR ALTER PROCEDURE sp_ImportarInquilinosPropietarios
     @RutaArchivo VARCHAR(255)
 AS
 BEGIN
 
+DECLARE @Carpeta VARCHAR(255) = 'C:\Users\Abigail\Downloads\consorcios\';
+DECLARE @RutaCompleta  NVARCHAR(4000);
     SET NOCOUNT ON;
 
-    IF CHARINDEX('''', @RutaArchivo) > 0 OR
-        CHARINDEX('--', @RutaArchivo) > 0 OR
-        CHARINDEX('/*', @RutaArchivo) > 0 OR 
-        CHARINDEX('*/', @RutaArchivo) > 0 OR
-        CHARINDEX(';', @RutaArchivo) > 0
-  
+    IF CHARINDEX('..', @RutaArchivo) > 0
+    OR CHARINDEX(';', @RutaArchivo) > 0
+    OR CHARINDEX('--', @RutaArchivo) > 0
+    OR CHARINDEX('/*', @RutaArchivo) > 0
+    OR CHARINDEX('/', @RutaArchivo) > 0 
+    OR CHARINDEX('\', @RutaArchivo) > 0 
+    OR PATINDEX('%[;''"%]%', @RutaArchivo) > 0 
 BEGIN
     RAISERROR('Nombre de archivo contiene caracteres invalidos.', 16, 1); RETURN;
+END
+IF RIGHT(LOWER(@RutaArchivo),4) <> '.csv'
+BEGIN
+    RAISERROR('Solo se permiten archivos .csv', 16, 1); RETURN;
 END
 
     PRINT 'Iniciando importaci�n de: ' + @RutaArchivo;
@@ -382,19 +386,20 @@ END
         DNI BIGINT,
         Email VARCHAR(50),
         Telefono BIGINT,
-        CVU_CBU VARCHAR(22),
+        CBU VARCHAR(22),
         Tipo VARCHAR(20)
     );
 
+    SET @RutaCompleta = @Carpeta + @RutaArchivo;
 
 -- bulk insert
     DECLARE @sql NVARCHAR(MAX);
 
-    PRINT 'Iniciando importaci�n de: ' + @RutaArchivo;
+    PRINT 'Iniciando importaci�n de: ' + @RutaCompleta;
 
     SET @sql = '
         BULK INSERT TemporalPersonas
-        FROM ''' + @RutaArchivo + '''
+        FROM ''' + REPLACE(@RutaCompleta, '''', '''''') + '''
         WITH
         (
             FIELDTERMINATOR = '';'',
@@ -413,47 +418,54 @@ END
         (DNI IS NULL OR DNI = '') AND
         (Email IS NULL OR Email = '') AND
         (Telefono IS NULL OR Telefono = '') AND
-        (CVU_CBU IS NULL OR CVU_CBU = '') AND
+        (CBU IS NULL OR CBU = '') AND
         (Tipo IS NULL OR Tipo = '');
 
 
 -- Se insertan los archivos en las tablas correspondientes
 
     DELETE FROM TemporalPersonas
-    WHERE CVU_CBU IN (
-        SELECT CVU_CBU
+    WHERE CBU IN (
+        SELECT CBU
         FROM TemporalPersonas
-        GROUP BY CVU_CBU
+        GROUP BY CBU
         HAVING COUNT(*) > 1
 );
 
-    INSERT INTO Consorcio.Persona (DNI, Nombre, Apellido, CVU_CBU, Telefono, Email, Tipo)
+    INSERT INTO Persona.Persona (DNI, Nombre, Apellido, CBU, Telefono, Email, Tipo)
     SELECT 
         DNI,
-        LTRIM(RTRIM(nombre)) AS Nombre,
+        LTRIM(RTRIM(Nombre)) AS Nombre,
         LTRIM(RTRIM(Apellido)) AS Apellido,
-        LTRIM(RTRIM(CVU_CBU)) AS CVU_CBU,
+        LTRIM(RTRIM(CBU)) AS CBU,
         Telefono,
         REPLACE(LTRIM(RTRIM(Email)), ' ', '') AS Email,
         LTRIM(RTRIM(Tipo)) AS Tipo
     FROM TemporalPersonas;
 
     -- join de persona y cuenta bancaria por CBU para insertar con la FK
-   INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, TitularId)
+   INSERT INTO Persona.CuentaBancaria (CBU, TitularId)
     SELECT DISTINCT 
-        LTRIM(RTRIM(it.CVU_CBU)) AS cbu,
-        p.idPersona
+        LTRIM(RTRIM(it.CBU)) AS CBU,
+        p.ID
     FROM TemporalPersonas it
-    JOIN Consorcio.Persona p ON LTRIM(RTRIM(p.CVU_CBU)) = LTRIM(RTRIM(it.CVU_CBU))
-    WHERE it.CVU_CBU IS NOT NULL AND it.CVU_CBU <> '';
+    JOIN Persona.Persona p ON LTRIM(RTRIM(p.CBU)) = LTRIM(RTRIM(it.CBU))
+    WHERE it.CBU IS NOT NULL AND it.CBU <> '';
 
 
     DROP TABLE IF EXISTS dbo.TemporalPersonas
 END;
 GO
 
+EXEC sp_ImportarInquilinosPropietarios 
+    @RutaArchivo = 'Inquilino-propietarios-datos.csv';
+
+
+   select * from Persona.Persona
+    select * from persona.CuentaBancaria
+GO
  -- FIN IMPORTACION DE PERSONAS
---__________________________________________________________________________________________________________________________
+
 
 --_____________________________________________________________________________________________________________________________________
 --IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)____________________________________________________________________________
@@ -622,84 +634,107 @@ EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
 
 --___________________________________________________________________________________________________________________________________________
 
-CREATE OR ALTER PROCEDURE Operaciones.CargaInquilinoPropietariosUF
-    @RutaArchivo VARCHAR(255)
+CREATE OR ALTER PROCEDURE CargaInquilinoPropietariosUF
+    @RutaArchivo VARCHAR(255)
 AS
 BEGIN
-    CREATE TABLE #CargaDatosTemp (
-        CVU_CBUPersona CHAR(22),
-        consorcio VARCHAR(50), 
-        numero VARCHAR(10),
-        piso VARCHAR(10),
-        departamento VARCHAR(10)   
+    SET NOCOUNT ON; 
+
+    CREATE TABLE #CargaDatosTemp (
+        CVU_CBUPersona CHAR(22),
+        consorcio VARCHAR(50), 
+        numero VARCHAR(10),
+        piso VARCHAR(10),
+        departamento VARCHAR(10)   
+    );
+
+
+    IF CHARINDEX('''', @RutaArchivo) > 0 OR
+        CHARINDEX('--', @RutaArchivo) > 0 OR
+        CHARINDEX('/*', @RutaArchivo) > 0 OR 
+        CHARINDEX('*/', @RutaArchivo) > 0 OR
+        CHARINDEX(';', @RutaArchivo) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END
+    ELSE
+    BEGIN
+        DECLARE @SQL NVARCHAR(MAX);
+    
+        SET @SQL = N'
+            BULK INSERT #CargaDatosTemp
+            FROM ''' + @RutaArchivo + '''
+            WITH (
+                FIELDTERMINATOR = ''|'',
+                ROWTERMINATOR = ''\n'',
+                FIRSTROW = 2
+            );';
+
+        EXEC sp_executesql @SQL;
+    END
+
+    CREATE TABLE #ConsorcioTemp (
+        CVU_CBUPersona CHAR(22),
+  	  ID_Consorcio INT,
+        numero VARCHAR(10),
+        piso VARCHAR(10),
+        departamento VARCHAR(10)
+    );
+
+    INSERT INTO #ConsorcioTemp (CVU_CBUPersona, ID_Consorcio, numero, piso, departamento)
+    SELECT 
+		cd.CVU_CBUPersona,
+        c.id,
+        cd.numero,
+        cd.piso,
+        cd.departamento
+    FROM #CargaDatosTemp AS cd
+    JOIN Consorcio AS c ON cd.consorcio = c.nombre;
+
+    -- UPDATE para registros existentes
+    UPDATE UF
+    SET 
+        UF.numero = Ctemp.numero,
+        UF.piso = Ctemp.piso,
+        UF.departamento = Ctemp.departamento,
+        UF.consorcioId = Ctemp.ID_Consorcio
+    FROM UnidadFuncional AS UF
+    INNER JOIN #ConsorcioTemp AS Ctemp ON UF.CVU_CBU = Ctemp.CVU_CBUPersona
+    WHERE 
+        ISNULL(UF.numero, '') <> ISNULL(Ctemp.numero, '') OR
+        ISNULL(UF.piso, '') <> ISNULL(Ctemp.piso, '') OR
+        ISNULL(UF.departamento, '') <> ISNULL(Ctemp.departamento, '') OR
+        UF.consorcioId <> Ctemp.ID_Consorcio;
+
+	
+	INSERT INTO UnidadFuncional (CVU_CBU, numero, piso, departamento, consorcioId, metrosCuadrados, porcentajeExpensas)
+    SELECT 
+        Ctemp.CVU_CBUPersona, 
+        Ctemp.numero, 
+        Ctemp.piso, 
+        Ctemp.departamento, 
+        Ctemp.ID_Consorcio, 
+        0, 
+        0
+    FROM #ConsorcioTemp AS Ctemp
+    WHERE NOT EXISTS (
+        SELECT 1 
+        FROM UnidadFuncional AS UF 
+        WHERE UF.CVU_CBU = Ctemp.CVU_CBUPersona
     );
 
 
-    IF CHARINDEX('''', @RutaArchivo) > 0 OR
-        CHARINDEX('--', @RutaArchivo) > 0 OR
-        CHARINDEX('/*', @RutaArchivo) > 0 OR 
-        CHARINDEX('*/', @RutaArchivo) > 0 OR
-        CHARINDEX(';', @RutaArchivo) > 0
-    BEGIN
-        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
-        RETURN;
-    END
-    ELSE
-    BEGIN
-        DECLARE @SQL NVARCHAR(MAX);
-    
-        SET @SQL = N'
-            BULK INSERT #CargaDatosTemp
-            FROM ''' + @RutaArchivo + '''
-            WITH (
-                FIELDTERMINATOR = ''|'',
-                ROWTERMINATOR = ''\n'',
-                FIRSTROW = 2
-            );';
-
-        EXEC sp_executesql @SQL;
-    END
-
-    CREATE TABLE #ConsorcioTemp (
-        CVU_CBUPersona CHAR(22),
-        ID_Consorcio INT,
-        numero VARCHAR(10),
-        piso VARCHAR(10),
-        departamento VARCHAR(10)
-    );
-
-    INSERT INTO #ConsorcioTemp (CVU_CBUPersona, ID_Consorcio, numero, piso, departamento)
-    SELECT c.CVU_CBUPersona,
-        c.id,
-        cd.numero,
-        cd.piso,
-        cd.departamento
-    FROM #CargaDatosTemp AS cd
-    JOIN Consorcio.Consorcio AS c ON cd.consorcio = c.nombre;
-
-    MERGE INTO Consorcio.UnidadFuncional AS target
-    USING #ConsorcioTemp AS source
-    ON target.CVU_CBUPersona = source.CVU_CBUPersona
-    WHEN MATCHED AND(
-        target.numero <> source.numero AND
-        target.piso <> source.piso AND
-        target.departamento <> source.departamento AND
-        target.consorcioId <> source.ID_Consorcio
-    ) THEN
-    UPDATE SET
-        target.numero = source.numero,
-        target.piso = source.piso,
-        target.departamento = source.departamento,
-        target.consorcioId = source.ID_Consorcio
-    WHEN NOT MATCHED BY TARGET THEN
-        INSERT (CVU_CBUPersona, numero, piso, departamento, consorcioId)
-        VALUES (source.CVU_CBUPersona,  source.numero, source.piso, source.departamento, source.ID_Consorcio);
+	DROP TABLE IF EXISTS #CargaDatosTemp;
+	DROP TABLE IF EXISTS #ConsorcioTemp;
 END
 GO
 
---_______________________________________________________________________________________________________________________
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarUFporConsorcio
+
+-- ___________________________________________________________________________
+
+CREATE OR ALTER PROCEDURE Consorcio.sp_ImportarUFporConsorcio
 @RutaArchivo VARCHAR(500)
 AS
 BEGIN
@@ -756,7 +791,6 @@ WHERE NOT EXISTS (
     FROM Consorcio.Consorcio AS C
     WHERE C.nombre = T.nombreConsorcio
 );
-
 
 MERGE Consorcio.UnidadFuncional AS target
 USING (
