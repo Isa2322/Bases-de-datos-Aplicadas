@@ -482,9 +482,9 @@ BEGIN
     --esto es para verificar q la ruta venga bien escrita
        IF CHARINDEX('''', @rutaArch) > 0 OR
        CHARINDEX('--', @rutaArch) > 0 OR
-       CHARINDEX('/*', @rutaArchivo) > 0 OR 
-       CHARINDEX('*/', @rutaArchivo) > 0 OR
-       CHARINDEX(';', @rutaArchivo) > 0
+       CHARINDEX('/*', @rutaArch) > 0 OR 
+       CHARINDEX('*/', @rutaArch) > 0 OR
+       CHARINDEX(';', @rutaArch) > 0
     BEGIN
         RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
         RETURN;
