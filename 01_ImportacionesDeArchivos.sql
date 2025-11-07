@@ -700,92 +700,105 @@ GO
 --_______________________________________________________________________________________________________________________
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarUFporConsorcio
-@RutaArchivo VARCHAR(500)
+    @RutaArchivo VARCHAR(500)
 AS
 BEGIN
-SET NOCOUNT ON;
+    SET NOCOUNT ON;
 
-RAISERROR('--- INICIO: Importación de Unidades Funcionales por Consorcio ---', 0, 1) WITH NOWAIT;
+    -- Validación de caracteres peligrosos
+    IF CHARINDEX('''', @RutaArchivo) > 0 OR
+       CHARINDEX('--', @RutaArchivo) > 0 OR
+       CHARINDEX('/*', @RutaArchivo) > 0 OR 
+       CHARINDEX('*/', @RutaArchivo) > 0 OR
+       CHARINDEX(';', @RutaArchivo) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END
 
-IF CHARINDEX('..', @RutaArchivo) > 0 OR
-   CHARINDEX(';', @RutaArchivo) > 0 OR
-   CHARINDEX('--', @RutaArchivo) > 0 OR
-   CHARINDEX('/*', @RutaArchivo) > 0 OR
-   CHARINDEX('*/', @RutaArchivo) > 0
-BEGIN
-    RAISERROR('Error: Ruta contiene caracteres no permitidos.', 16, 1);
-    RETURN;
-END;
+    -- Crear tabla temporal
+    IF OBJECT_ID('tempdb..#TemporalUF') IS NOT NULL 
+        DROP TABLE #TemporalUF;
 
-IF RIGHT(LOWER(@RutaArchivo), 4) <> '.csv'
-BEGIN
-    RAISERROR('Error: Solo se permiten archivos con extensión .csv', 16, 1);
-    RETURN;
-END;
-
-IF OBJECT_ID('tempdb..#TemporalUF') IS NOT NULL DROP TABLE #TemporalUF;
-
-CREATE TABLE #TemporalUF (
-    CVU_CBU CHAR(22),
-    nombreConsorcio VARCHAR(100),
-    nroUnidadFuncional INT,
-    piso VARCHAR(10),
-    departamento VARCHAR(10)
-);
-
-DECLARE @SQL NVARCHAR(MAX);
-SET @SQL = '
-    BULK INSERT #TemporalUF
-    FROM ''' + @RutaArchivo + '''
-    WITH (
-        FIELDTERMINATOR = ''|'',
-        ROWTERMINATOR = ''0x0a'',
-        FIRSTROW = 2,
-        CODEPAGE = ''65001''
+    CREATE TABLE #TemporalUF (
+        CVU_CBU CHAR(22),
+        nombreConsorcio VARCHAR(100),
+        nroUnidadFuncional INT,
+        piso VARCHAR(10),
+        departamento VARCHAR(10)
     );
-';
-EXEC sp_executesql @SQL;
 
-RAISERROR('Carga en tabla temporal completada. Insertando/actualizando datos...', 0, 1) WITH NOWAIT;
+    -- BULK INSERT con SQL dinámico
+    DECLARE @SQL NVARCHAR(MAX);
 
-INSERT INTO Consorcio.Consorcio (nombre, direccion, metrosCuadradosTotal)
-SELECT DISTINCT T.nombreConsorcio, 'Dirección desconocida', 0
-FROM #TemporalUF AS T
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM Consorcio.Consorcio AS C
-    WHERE C.nombre = T.nombreConsorcio
-);
+    SET @SQL = '
+        BULK INSERT #TemporalUF
+        FROM ''' + @RutaArchivo + '''
+        WITH (
+            FIELDTERMINATOR = ''|'',
+            ROWTERMINATOR = ''\n'',
+            FIRSTROW = 2,
+            CODEPAGE = ''65001''
+        );';
+    
+    EXEC sp_executesql @SQL;
 
+    -- Borrar filas completamente nulas
+    DELETE FROM #TemporalUF
+    WHERE 
+        (CVU_CBU IS NULL OR CVU_CBU = '') AND
+        (nombreConsorcio IS NULL OR nombreConsorcio = '') AND
+        (nroUnidadFuncional IS NULL) AND
+        (piso IS NULL OR piso = '') AND
+        (departamento IS NULL OR departamento = '');
 
-MERGE Consorcio.UnidadFuncional AS target
-USING (
+    -- Insertar consorcios nuevos si no existen
+    INSERT INTO Consorcio.Consorcio (nombre, direccion)
+    SELECT DISTINCT 
+        T.nombreConsorcio, 
+        'Dirección desconocida'
+    FROM #TemporalUF AS T
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM Consorcio.Consorcio AS C
+        WHERE C.nombre = T.nombreConsorcio
+    );
+
+    -- UPDATE de UF existentes
+    UPDATE Consorcio.UnidadFuncional
+    SET 
+        consorcioId = C.id,
+        numero = CAST(T.nroUnidadFuncional AS VARCHAR(10)),
+        piso = T.piso,
+        departamento = T.departamento
+    FROM Consorcio.UnidadFuncional AS UF
+    INNER JOIN #TemporalUF AS T ON UF.CVU_CBU = T.CVU_CBU
+    INNER JOIN Consorcio.Consorcio AS C ON T.nombreConsorcio = C.nombre;
+
+    -- INSERT de UF nuevas
+    INSERT INTO Consorcio.UnidadFuncional (
+        CVU_CBU, 
+        consorcioId, 
+        numero, 
+        piso, 
+        departamento
+    )
     SELECT 
         T.CVU_CBU,
-        C.id AS consorcioId,
-        CAST(T.nroUnidadFuncional AS VARCHAR(10)) AS numero,
+        C.id,
+        CAST(T.nroUnidadFuncional AS VARCHAR(10)),
         T.piso,
         T.departamento
     FROM #TemporalUF AS T
     INNER JOIN Consorcio.Consorcio AS C ON T.nombreConsorcio = C.nombre
-) AS source
-ON target.CVU_CBU = source.CVU_CBU
-WHEN MATCHED THEN
-    UPDATE SET 
-        target.consorcioId = source.consorcioId,
-        target.numero = source.numero,
-        target.piso = source.piso,
-        target.departamento = source.departamento
-WHEN NOT MATCHED THEN
-    INSERT (CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas)
-    VALUES (source.CVU_CBU, source.consorcioId, source.numero, source.piso, source.departamento, 50, 10); -- valores de prueba
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM Consorcio.UnidadFuncional AS UF
+        WHERE UF.CVU_CBU = T.CVU_CBU
+    );
 
-RAISERROR('Importación completada correctamente.', 0, 1) WITH NOWAIT;
-
-DROP TABLE #TemporalUF;
-
-RAISERROR('--- FIN: Importación de Unidades Funcionales por Consorcio ---', 0, 1) WITH NOWAIT;
-
+    -- Limpiar tabla temporal
+    DROP TABLE #TemporalUF;
 
 END;
 GO
