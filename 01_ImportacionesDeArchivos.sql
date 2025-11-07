@@ -659,8 +659,171 @@ SET @rutaArchCSV = 'C:\Users\camil\OneDrive\Escritorio\Facultad\BDD\datos varios
 EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
 */
 
---___________________________________________________________________________________________________________________________________________
+--===============================================================================================================
+-- IMPORTACION DIRECTAMENTE DESDE EL EXCEL PARA CONSORCIOS
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios_excel
+    @rutaExcel VARCHAR(1000)
+AS
+BEGIN
+    SET NOCOUNT ON;
 
+    -- valido ruta
+    IF CHARINDEX('''', @rutaExcel) > 0 
+    OR CHARINDEX('--', @rutaExcel) > 0 
+    OR CHARINDEX('/', @rutaExcel) > 0 
+    OR CHARINDEX('/', @rutaExcel) > 0
+    OR CHARINDEX(';', @rutaExcel) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos.', 16, 1);
+        RETURN;
+    END;
+
+    -- tabla temporal para los datos
+    IF OBJECT_ID('tempdb..#TempConsorcios') IS NOT NULL DROP TABLE #TempConsorcios
+    --si existe la borro para evitar problemas
+    CREATE TABLE #TempConsorcios 
+    (
+        nombre VARCHAR(200) NULL,
+        direccion VARCHAR(300) NULL,
+        superficieTotal DECIMAL(18,2) NULL
+    )
+
+    -- importo los datos desde el excel
+    DECLARE @sql NVARCHAR(MAX);
+    SET @sql = N'
+        INSERT INTO #TempConsorcios (nombre, direccion, superficieTotal)
+        SELECT 
+            CAST([Nombre]    AS VARCHAR(200)) AS nombre,
+            CAST([Direccion] AS VARCHAR(300)) AS direccion,
+            TRY_CAST([SuperficieTotal] AS DECIMAL(18,2)) AS superficieTotal
+        FROM OPENROWSET(
+            ''Microsoft.ACE.OLEDB.12.0'',
+            ''Excel 12.0;HDR=YES;IMEX=1;Database=' + @rutaExcel + ''',
+            ''SELECT * FROM [Consorcios$]''
+        );';
+    EXEC sys.sp_executesql @sql;
+
+    -- elimino filas vacías
+    DELETE FROM #TempConsorcios WHERE LTRIM(RTRIM(nombre)) = '';
+
+    -- actualizo los consorcios existentes
+    UPDATE c
+    SET 
+        c.direccion = ISNULL(t.direccion, c.direccion),
+        c.superficieTotal = ISNULL(t.superficieTotal, c.superficieTotal)
+    FROM Consorcio.Consorcio c
+    INNER JOIN #TempConsorcios t ON c.nombre = t.nombre;
+
+    -- inserto los nuevos consorcios que no existan todavía
+    INSERT INTO Consorcio.Consorcio (nombre, direccion, superficieTotal)
+    SELECT 
+        t.nombre, 
+        t.direccion, 
+        t.superficieTotal
+    FROM #TempConsorcios t
+    WHERE NOT EXISTS (
+        SELECT 1 
+        FROM Consorcio.Consorcio c 
+        WHERE c.nombre = t.nombre
+    );
+
+    DROP TABLE #TempConsorcios;
+END;
+GO
+--===============================================================================================================
+-- IMPORTACION DIRECTAMENTE DESDE EL EXCEL PARA PROVEEDORES
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores_excel
+    @rutaExcel VARCHAR(1000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- valido ruta
+    IF CHARINDEX('''', @rutaExcel) > 0 
+    OR CHARINDEX('--', @rutaExcel) > 0 
+    OR CHARINDEX('/', @rutaExcel) > 0 
+    OR CHARINDEX('/', @rutaExcel) > 0
+    OR CHARINDEX(';', @rutaExcel) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos.', 16, 1);
+        RETURN;
+    END;
+
+
+    -- tabla temporal original
+    IF OBJECT_ID('tempdb..#TempProveedoresGastoOriginal') IS NOT NULL DROP TABLE #TempProveedoresGastoOriginal;
+    CREATE TABLE #TempProveedoresGastoOriginal 
+    (
+        tipoGasto VARCHAR(100),
+        columnaMixta VARCHAR(200),
+        detalleAlternativo VARCHAR(200),
+        nomConsorcio VARCHAR(100)
+    );
+
+    -- importo la hoja Proveedores$
+    DECLARE @sql NVARCHAR(MAX);
+    SET @sql = N'
+        INSERT INTO #TempProveedoresGastoOriginal (tipoGasto, columnaMixta, detalleAlternativo, nomConsorcio)
+        SELECT 
+            CAST([TipoGasto]    AS VARCHAR(100)),
+            CAST([ColumnaMixta] AS VARCHAR(200)),
+            CAST([DetalleAlt]   AS VARCHAR(200)),
+            CAST([Consorcio]    AS VARCHAR(100))
+        FROM OPENROWSET(
+            ''Microsoft.ACE.OLEDB.12.0'',
+            ''Excel 12.0;HDR=YES;IMEX=1;Database=' + @rutaExcel + ''',
+            ''SELECT * FROM [Proveedores$]''
+        );';
+    EXEC sys.sp_executesql @sql;
+
+    -- tabla temporal para procesar dastos antes de mandarlo a la tabla original
+    IF OBJECT_ID('tempdb..#TempProveedoresGastoProcesado') IS NOT NULL DROP TABLE #TempProveedoresGastoProcesado;
+    CREATE TABLE #TempProveedoresGastoProcesado 
+    (
+        tipoGasto VARCHAR(100),
+        nomEmpresa VARCHAR(200),
+        detalle VARCHAR(200),
+        nomConsorcio VARCHAR(100)
+    );
+
+    -- proceso los datos para separar la columna mixta
+    INSERT INTO #TempProveedoresGastoProcesado (tipoGasto, nomEmpresa, detalle, nomConsorcio)
+    SELECT
+        tipoGasto,
+        CASE
+            WHEN CHARINDEX('-', columnaMixta) > 0 
+            --si hay guion me quedo con lo q tenga del lado izquierdo para el nombre de empresa
+                THEN LTRIM(RTRIM(LEFT(columnaMixta, CHARINDEX('-', columnaMixta) - 1)))
+            ELSE LTRIM(RTRIM(columnaMixta))
+        END AS nomEmpresa,
+        CASE
+            WHEN CHARINDEX('-', columnaMixta) > 0 
+            --si hay guion me quedo con el lado derecho para el detalle
+                THEN LTRIM(RTRIM(SUBSTRING(columnaMixta, CHARINDEX('-', columnaMixta) + 1, 200)))
+            ELSE LTRIM(RTRIM(detalleAlternativo))
+        END AS detalle,
+        LTRIM(RTRIM(nomConsorcio)) AS nomConsorcio
+    FROM #TempProveedoresGastoOriginal;
+
+    -- actualizo los gastos existentes
+    UPDATE go
+    SET 
+        go.nombreEmpresaoPersona = p.nomEmpresa,
+        go.detalle = p.detalle
+    FROM Negocio.GastoOrdinario go
+    INNER JOIN Negocio.Expensa e ON e.id = go.idExpensa
+    INNER JOIN Consorcio.Consorcio c ON c.id = e.consorcio_id
+    INNER JOIN #TempProveedoresGastoProcesado p
+        ON p.tipoGasto = go.tipoServicio
+       AND p.nomConsorcio = c.nombre;
+
+    DROP TABLE #TempProveedoresGastoOriginal;
+    DROP TABLE #TempProveedoresGastoProcesado;
+END;
+GO
+
+--===============================================================================================================
 CREATE OR ALTER PROCEDURE Operaciones.sp_CargaInquilinoPropietariosUF
     @RutaArchivo VARCHAR(255)
 AS
