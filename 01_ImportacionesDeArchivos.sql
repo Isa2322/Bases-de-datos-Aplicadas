@@ -15,54 +15,6 @@ USE [Com5600G11];
 GO
 
 
-
-CREATE OR ALTER PROCEDURE Operaciones.ImportarTiposRol
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    -- Inserta el tipo "Inquilino" si no existe
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.TipoRol WHERE nombre = 'Inquilino')
-    BEGIN
-        INSERT INTO Consorcio.TipoRol (nombre, descripcion)
-        VALUES ('Inquilino', 'Persona que alquila una unidad funcional dentro del consorcio.');
-    END
-
-    -- Inserta el tipo "Propietario" si no existe
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.TipoRol WHERE nombre = 'Propietario')
-    BEGIN
-        INSERT INTO Consorcio.TipoRol (nombre, descripcion)
-        VALUES ('Propietario', 'Dueño de una o más unidades funcionales dentro del consorcio.');
-    END
-
-    PRINT N'Carga de datos de Tipos de Rol finalizada.';
-END
-GO
-
--- FORMAS DE PAGO
-CREATE OR ALTER PROCEDURE Operaciones.FormaDePagoCarga
-	AS
-	BEGIN
-
-    -- Pago en Efectivo (si aplica en la administraci�n)
-    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Efectivo en Oficina')
-    BEGIN
-        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
-        VALUES ('Efectivo en Oficina', 'Recibo Manual');
-    END
-
-    -- Pago Electr�nico (Mercado Pago, otros)
-    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Mercado Pago/Billetera')
-    BEGIN
-        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
-        VALUES ('Mercado Pago/Billetera', 'ID de Transacci�n');
-    END
-
-    PRINT N'Carga de datos de Formas de Pago finalizada.';
-
-END
-GO
-
 --Funcion para cargar el archivo pagos_consorcios.csv
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportacionPago @RutaArchivo VARCHAR(255)
 AS
