@@ -231,7 +231,7 @@ GO
 BEGIN
     CREATE TABLE Negocio.Expensa
     (
-        id INT PRIMARY KEY,
+        id INT PRIMARY KEY IDENTITY(1,1),
         consorcio_id INT,
         saldoAnterior DECIMAL(10,2),
         ingresosEnTermino DECIMAL(10,2),
@@ -276,7 +276,7 @@ BEGIN
     CREATE TABLE Negocio.GastoOrdinario 
     (
         idGasto INT PRIMARY KEY IDENTITY,
-        idExpensa INT NOT NULL, 
+        idExpensa INT, 
         nombreEmpresaoPersona VARCHAR(200) NULL,
         nroFactura CHAR(10) NOT NULL, -- CHAR(10) y NOT NULL
         fechaEmision DATE NULL,
@@ -306,7 +306,7 @@ BEGIN
     CREATE TABLE Negocio.GastoExtraordinario 
     (
         idGasto INT PRIMARY KEY IDENTITY,
-        idExpensa INT NOT NULL, 
+        idExpensa INT, 
         nombreEmpresaoPersona VARCHAR(200) NULL,
         nroFactura VARCHAR(50) NULL,
         fechaEmision DATE NULL,
@@ -345,7 +345,7 @@ GO
 BEGIN
     CREATE TABLE Negocio.DetalleExpensa
     (
-        id INT PRIMARY KEY,
+        id INT PRIMARY KEY IDENTITY(1,1),
         expensaId INT,
         idUnidadFuncional INT,
         prorrateoOrdinario DECIMAL(10,2),
