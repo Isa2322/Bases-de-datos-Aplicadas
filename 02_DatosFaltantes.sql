@@ -258,3 +258,531 @@ BEGIN
 
 END
 GO
+
+-- =============================================
+-- ====cambio en la tabla de aplicar pagos======
+-- =============================================
+
+/*
+
+/*
+    Resumen de cambios: 
+    Ahora los pagos tambien van a la tabla de detalles expnesa
+    La varaible quedo pero no la use (REVISAR si hace falta solamente)
+
+    No da errores pero no la use con datos (REVISAR)
+
+	Si alguien lo prueba y funciona bien, que vea si todos los campos de DEtallExpensa
+    tienen datos con un select * from Negocio.DetalleExpensa
+
+*/
+
+-- CAmbiaria nombre a aplicarPagos solamente
+CREATE OR ALTER PROCEDURE Operaciones.sp_AplicarPagosACuentas
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @FilasAfectadas INT = 0;
+
+    --  veo los pagos a aplicar y los guardao en tabla temporal
+    SELECT
+        P.id AS idPago,
+        P.importe AS importeAplicado,
+        DE.id AS idDetalleExpensa
+    INTO #PagosAAplicar
+    FROM Pago.Pago AS P
+
+        -- Encontrar la Unidad Funcional (UF) dueña del CVU/CBU de origen del pago
+        INNER JOIN Consorcio.UnidadFuncional AS UF
+        ON P.cbuCuentaOrigen = UF.CVU_CBU
+
+        -- Encontrar el Detalle de Expensa (DE) correspondiente a esa UF
+        INNER JOIN Negocio.DetalleExpensa AS DE
+        ON DE.idUnidadFuncional = UF.id
+
+        -- Encontrar la Expensa (E) para verificar el período
+        INNER JOIN Negocio.Expensa AS E
+        ON DE.expensaId = E.id
+
+    WHERE 
+        -- LÓGICA DE APLICACIÓN DEL PERÍODO (Mes de Pago = Mes de Vencimiento de Expensa)
+        -- Si el pago se hace en el mes M, se aplica a la expensa generada para el periodo M-1.
+        E.fechaPeriodoAnio = 
+            CASE 
+                -- Si el pago se hace en enero, se aplica a la expensa de diciembre del año anterior.
+                WHEN MONTH(P.fecha) = 1 THEN YEAR(P.fecha) - 1 
+                ELSE YEAR(P.fecha)
+            END
+        AND
+        E.fechaPeriodoMes = 
+            CASE 
+                -- Si el pago se hace en enero (1), el mes del periodo de expensa es diciembre (12).
+                WHEN MONTH(P.fecha) = 1 THEN 12 
+                ELSE MONTH(P.fecha) - 1 -- Si es otro mes, se aplica al mes anterior.
+            END
+
+        -- GUARDRAIL: Solo aplica pagos que aún NO hayan sido registrados en PagoAplicado.
+        AND NOT EXISTS (
+            SELECT 1
+            FROM Pago.PagoAplicado AS PA
+            WHERE PA.idPago = P.id
+        );
+
+    -- Insertar en Pago.PagoAplicado desde la tabla temporal
+    INSERT INTO Pago.PagoAplicado (idPago, idDetalleExpensa, importeAplicado)
+    SELECT
+        idPago,
+        idDetalleExpensa,
+        importeAplicado
+    FROM #PagosAAplicar;
+
+
+    -- Actualizar pagosRecibidos en DetalleExpensa
+    -- Agrupamos por si una UF hizo un par de pagos que aplican al mismo DetalleExpensa
+    WITH SumaPagosPorDetalle AS
+    (
+        SELECT
+            idDetalleExpensa,
+            SUM(importeAplicado) AS MontoTotalPagado
+        FROM #PagosAAplicar
+        GROUP BY idDetalleExpensa
+    )
+    UPDATE DE
+    SET DE.pagosRecibidos = ISNULL(DE.pagosRecibidos, 0) + SP.MontoTotalPagado
+    FROM Negocio.DetalleExpensa AS DE
+    INNER JOIN SumaPagosPorDetalle AS SP ON DE.id = SP.idDetalleExpensa;
+
+    SET @FilasAfectadas = @@ROWCOUNT;
+
+    -- Limpiar tabla temporal
+    DROP TABLE IF EXISTS #PagosAAplicar;
+
+END
+GO
+*/
+
+--Rellena tabla CuentaBancaria
+CREATE OR ALTER PROCEDURE SP_generadorCuentaBancaria
+AS
+BEGIN
+
+DECLARE @i INT = 1
+
+--Maximo de valores generados
+DECLARE @maxi INT = 4 
+
+-- Listas de nombres y apellidos para combinar
+DECLARE @Nombres TABLE (nombre VARCHAR(20));
+INSERT INTO @Nombres VALUES
+('Juan'),('Maria'),('Carlos'),('Monica'),('Jorge'),
+('Lucia'),('Sofia'),('Damian'),('Martina'),('Diego'),
+('Barbara'),('Franco'),('Valentina'),('Nicolas'),('Camila')
+
+DECLARE @Apellidos TABLE (apellido VARCHAR(20));
+INSERT INTO @Apellidos VALUES
+('Perez'),('Gomez'),('Rodriguez'),('Lopez'),('Fernandez'),
+('Garcia'),('Martinez'),('Pereira'),('Romero'),('Torres'),
+('Castro'),('Maciel'),('Lipchis'),('Ramos'),('Molina')
+
+WHILE @i <= @maxi
+BEGIN
+	-- Seleccionar nombre y apellido aleatorio
+		DECLARE @nombre VARCHAR(20) = (
+		SELECT TOP 1 nombre FROM @Nombres ORDER BY NEWID())
+
+	DECLARE @apellido VARCHAR(20) = (
+		SELECT TOP 1 apellido FROM @Apellidos ORDER BY NEWID())
+
+	INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular, saldo)
+	VALUES (
+		-- CVU/CBU= 22 digitos aleatorios rellenados con 0 a la izquierda
+		RIGHT('0000000000000000000000' + CAST(ABS(CHECKSUM(NEWID())) % 1000000000000000000000 AS VARCHAR(22)), 22),
+
+		-- Nombre Titular= combinacion nombre + apellido
+		@nombre + ' ' + @apellido,
+
+		-- Saldo =numero aleatorio entre 1000 y 50000
+		CAST(ROUND(((RAND(CHECKSUM(NEWID())) * 49000) + 1000), 2) AS DECIMAL(10,2)))
+
+	SET @i += 1;
+END
+END 
+GO
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_CargaConsorciosSemilla
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    PRINT N'Insertando/Verificando datos semilla en Consorcio.Consorcio...';
+
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.Consorcio WHERE nombre = 'Azcuenaga')
+    BEGIN
+        INSERT INTO Consorcio.Consorcio (nombre, direccion)
+        VALUES ('Azcuenaga', 'Dirección desconocida');
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.Consorcio WHERE nombre = 'Torre Central')
+    BEGIN
+        INSERT INTO Consorcio.Consorcio (nombre, direccion)
+        VALUES ('Torre Central', 'Dirección desconocida');
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.Consorcio WHERE nombre = 'Edificio Mitre')
+    BEGIN
+        INSERT INTO Consorcio.Consorcio (nombre, direccion)
+        VALUES ('Edificio Mitre', 'Dirección desconocida');
+    END
+
+    PRINT N'Carga de datos semilla de Consorcios finalizada.';
+END
+GO
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_CargaCuentasBancariasSemilla
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    PRINT N'Insertando/Verificando datos semilla en Consorcio.CuentaBancaria...';
+
+    DECLARE @i INT = 1;
+    DECLARE @max INT = 6;
+
+    -- Cuentas para Azcuenaga
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100010000000101')
+    BEGIN
+        INSERT INTO Consorcio.CuentaBancaria (CVU_CBU)
+        VALUES ('0000003100010000000101');
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100010000000102')
+    BEGIN
+        INSERT INTO Consorcio.CuentaBancaria (CVU_CBU)
+        VALUES ('0000003100010000000102');
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100010000000103')
+    BEGIN
+        INSERT INTO Consorcio.CuentaBancaria (CVU_CBU)
+        VALUES ('0000003100010000000103');
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100010000000104')
+    BEGIN
+        INSERT INTO Consorcio.CuentaBancaria (CVU_CBU)
+        VALUES ('0000003100010000000104');
+    END
+
+    PRINT '  >> Cuentas bancarias de "Azcuenaga" insertadas (4 cuentas).';
+
+    -- Cuentas para Torre Central
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100020000000201')
+    BEGIN
+        INSERT INTO Consorcio.CuentaBancaria (CVU_CBU)
+        VALUES ('0000003100020000000201');
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100020000000202')
+    BEGIN
+        INSERT INTO Consorcio.CuentaBancaria (CVU_CBU)
+        VALUES ('0000003100020000000202');
+    END
+
+    PRINT '  >> Cuentas bancarias de "Torre Central" insertadas (2 cuentas).';
+
+    -- Cuenta para Edificio Mitre
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100030000000301')
+    BEGIN
+        INSERT INTO Consorcio.CuentaBancaria (CVU_CBU)
+        VALUES ('0000003100030000000301');
+    END
+
+    PRINT '  >> Cuenta bancaria de "Edificio Mitre" insertada (1 cuenta).';
+
+    PRINT N'Carga de datos semilla de Cuentas Bancarias finalizada.';
+END
+GO
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_CargaUnidadesFuncionalesSemilla
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    PRINT N'Insertando/Verificando datos semilla en Consorcio.UnidadFuncional...';
+
+    DECLARE @idAzcuenaga INT;
+    DECLARE @idTorreCentral INT;
+    DECLARE @idEdificioMitre INT;
+
+    -- Obtener IDs de los consorcios
+    SELECT @idAzcuenaga = id FROM Consorcio.Consorcio WHERE nombre = 'Azcuenaga';
+    SELECT @idTorreCentral = id FROM Consorcio.Consorcio WHERE nombre = 'Torre Central';
+    SELECT @idEdificioMitre = id FROM Consorcio.Consorcio WHERE nombre = 'Edificio Mitre';
+
+    IF @idAzcuenaga IS NULL
+    BEGIN
+        RAISERROR('Error: El consorcio "Azcuenaga" no existe. Ejecute primero sp_CargaConsorciosSemilla.', 16, 1);
+        RETURN;
+    END
+
+    -- Verificar que existan las cuentas bancarias
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100010000000101')
+    BEGIN
+        RAISERROR('Error: Las cuentas bancarias no existen. Ejecute primero sp_CargaCuentasBancariasSemilla.', 16, 1);
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.UnidadFuncional WHERE CVU_CBU = '0000003100010000000101')
+    BEGIN
+        INSERT INTO Consorcio.UnidadFuncional (
+            CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas
+        )
+        VALUES (
+            '0000003100010000000101', @idAzcuenaga, '1', 'PB', 'A', 45.00, 4.4
+        );
+    END
+
+    -- UF 2 - PB B (45 m², coeficiente 4.4)
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.UnidadFuncional WHERE CVU_CBU = '0000003100010000000102')
+    BEGIN
+        INSERT INTO Consorcio.UnidadFuncional (
+            CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas
+        )
+        VALUES (
+            '0000003100010000000102', @idAzcuenaga, '2', 'PB', 'B', 45.00, 4.4
+        );
+    END
+
+    -- UF 3 - PB C (45 m², coeficiente 4.4)
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.UnidadFuncional WHERE CVU_CBU = '0000003100010000000103')
+    BEGIN
+        INSERT INTO Consorcio.UnidadFuncional (
+            CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas
+        )
+        VALUES (
+            '0000003100010000000103', @idAzcuenaga, '3', 'PB', 'C', 45.00, 4.4
+        );
+    END
+
+    -- UF 4 - PB D (45 m², coeficiente 4.4)
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.UnidadFuncional WHERE CVU_CBU = '0000003100010000000104')
+    BEGIN
+        INSERT INTO Consorcio.UnidadFuncional (
+            CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas
+        )
+        VALUES (
+            '0000003100010000000104', @idAzcuenaga, '4', 'PB', 'D', 45.00, 4.4
+        );
+    END
+
+    PRINT '  >> Unidades Funcionales de "Azcuenaga" insertadas (4 UFs - PB A/B/C/D, coeficiente 4.4 c/u).';
+    
+    IF @idTorreCentral IS NOT NULL
+    BEGIN
+        -- UF 1 - Piso 1 A (60 m²)
+        IF NOT EXISTS (SELECT 1 FROM Consorcio.UnidadFuncional WHERE CVU_CBU = '0000003100020000000201')
+        BEGIN
+            INSERT INTO Consorcio.UnidadFuncional (
+                CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas
+            )
+            VALUES (
+                '0000003100020000000201', @idTorreCentral, '1', '1', 'A', 60.00, 52.17
+            );
+        END
+
+        -- UF 2 - Piso 1 B (55 m²)
+        IF NOT EXISTS (SELECT 1 FROM Consorcio.UnidadFuncional WHERE CVU_CBU = '0000003100020000000202')
+        BEGIN
+            INSERT INTO Consorcio.UnidadFuncional (
+                CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas
+            )
+            VALUES (
+                '0000003100020000000202', @idTorreCentral, '2', '1', 'B', 55.00, 47.83
+            );
+        END
+
+        PRINT '  >> Unidades Funcionales de "Torre Central" insertadas (2 UFs, 52.17% y 47.83%).';
+    END
+    
+    IF @idEdificioMitre IS NOT NULL
+    BEGIN
+        -- UF 1 - Piso 2 A (70 m²)
+        IF NOT EXISTS (SELECT 1 FROM Consorcio.UnidadFuncional WHERE CVU_CBU = '0000003100030000000301')
+        BEGIN
+            INSERT INTO Consorcio.UnidadFuncional (
+                CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas
+            )
+            VALUES (
+                '0000003100030000000301', @idEdificioMitre, '1', '2', 'A', 70.00, 100.00
+            );
+        END
+
+        PRINT '  >> Unidades Funcionales de "Edificio Mitre" insertadas (1 UF, 100%).';
+    END
+
+    PRINT N'Carga de datos semilla de Unidades Funcionales finalizada.';
+END
+GO
+-- =============================================
+-- Generador de expensas
+/*
+    Lo pude probar con muy pocos datos y andaba, hay que volver
+    a testear con todas las demas tablas cargadas.
+
+    Deberia funcioar bien. para cuaquier Enero, para otros meses me tiro error
+    porque no tenia datos de mesews anteriores.
+
+    Si alguien lo prueba y funciona bien, que vea si todos los campos de expensa
+    tienen datos con un select * from Negocio.Expensa
+
+	Ver si se puede reemplazar la linea SET @NuevaExpensaID = SCOPE_IDENTITY();
+	con algo mas normal y que sepamos
+*/
+
+/*CREATE OR ALTER PROCEDURE Negocio.SP_GenerarExpensasMensuales
+    @ConsorcioID INT,
+    @Anio INT,
+    @Mes INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- Variables para el nuevo encabezado de Expensa
+    DECLARE @NuevaExpensaID INT;
+    DECLARE @SaldoAnteriorConsorcio DECIMAL(18,2);
+    DECLARE @TotalIngresosMes DECIMAL(18,2);
+    DECLARE @TotalGastoOrd DECIMAL(18,2);
+    DECLARE @TotalGastoExt DECIMAL(18,2);
+    DECLARE @EgresosTotales DECIMAL(18,2);
+    DECLARE @SaldoCierre DECIMAL(18,2);
+
+    -- Variables para buscar el mes anterior
+    DECLARE @FechaMesAnterior DATE = DATEADD(MONTH, -1, DATEFROMPARTS(@Anio, @Mes, 1));
+    DECLARE @AnioAnterior INT = YEAR(@FechaMesAnterior);
+    DECLARE @MesAnterior INT = MONTH(@FechaMesAnterior);
+
+    BEGIN TRY
+        -- Obtener saldo anterior del consorcio
+        SELECT @SaldoAnteriorConsorcio = ISNULL(saldoCierre, 0)
+        FROM Negocio.Expensa
+        WHERE consorcioId = @ConsorcioID
+          AND fechaPeriodoAnio = @AnioAnterior
+          AND fechaPeriodoMes = @MesAnterior;
+
+        -- Busco el total de ingresos del mes anterior
+        SELECT @TotalIngresosMes = ISNULL(SUM(de.pagosRecibidos), 0)
+        FROM Negocio.DetalleExpensa AS de
+        INNER JOIN Negocio.Expensa AS e ON de.expensaId = e.id
+        WHERE e.consorcioId = @ConsorcioID
+          AND e.fechaPeriodoAnio = @AnioAnterior
+          AND e.fechaPeriodoMes = @MesAnterior;
+
+        -- Gastos Ordinarios
+        SELECT @TotalGastoOrd = ISNULL(SUM(importeTotal), 0)
+        FROM Negocio.GastoOrdinario
+        WHERE IdExpensa IS NULL
+          AND consorcioId = @ConsorcioID
+          AND YEAR(fechaEmision) = @Anio
+          AND MONTH(fechaEmision) = @Mes;
+          
+        -- Gastos Extraordinarios
+        SELECT @TotalGastoExt = ISNULL(SUM(importeTotal), 0)
+        FROM Negocio.GastoExtraordinario
+        WHERE IdExpensa IS NULL
+          AND consorcioId = @ConsorcioID
+          AND YEAR(fechaEmision) = @Anio
+          AND MONTH(fechaEmision) = @Mes;
+
+        SET @EgresosTotales = @TotalGastoOrd + @TotalGastoExt;
+        
+        -- Saldo de Cierre
+        SET @SaldoCierre = @SaldoAnteriorConsorcio + @TotalIngresosMes - @EgresosTotales;
+
+        -- CREO LA EXPENSA
+        INSERT INTO Negocio.Expensa 
+            (consorcioId, fechaPeriodoAnio, fechaPeriodoMes, 
+             saldoAnterior, ingresosEnTermino, egresos, saldoCierre)
+        VALUES 
+            (@ConsorcioID, @Anio, @Mes, 
+             @SaldoAnteriorConsorcio, @TotalIngresosMes, @EgresosTotales, @SaldoCierre);
+        
+        SET @NuevaExpensaID = SCOPE_IDENTITY(); 
+
+        -- Gastos pendientes apuntan a la nueva expensa
+        UPDATE Negocio.GastoOrdinario
+        SET IdExpensa = @NuevaExpensaID
+        WHERE IdExpensa IS NULL
+          AND consorcioId = @ConsorcioID
+          AND YEAR(fechaEmision) = @Anio
+          AND MONTH(fechaEmision) = @Mes;
+        
+        UPDATE Negocio.GastoExtraordinario
+        SET IdExpensa = @NuevaExpensaID
+        WHERE IdExpensa IS NULL
+          AND consorcioId = @ConsorcioID
+          AND YEAR(fechaEmision) = @Anio
+          AND MONTH(fechaEmision) = @Mes;
+
+        -- Crear detalle de expensas por unidad funcional
+        WITH DeudaMesAnterior AS (
+            SELECT
+                de.idUnidadFuncional,
+                (de.totalaPagar - ISNULL(de.pagosRecibidos, 0)) AS SaldoDeudor
+            FROM Negocio.DetalleExpensa AS de
+            INNER JOIN Negocio.Expensa AS e ON de.expensaId = e.id
+            WHERE e.consorcioId = @ConsorcioID
+              AND e.fechaPeriodoAnio = @AnioAnterior
+              AND e.fechaPeriodoMes = @MesAnterior
+        )
+        
+        INSERT INTO Negocio.DetalleExpensa 
+            (expensaId, idUnidadFuncional, 
+             prorrateoOrdinario, prorrateoExtraordinario, 
+             saldoAnteriorAbonado,
+             interesMora, 
+             pagosRecibidos,
+             totalaPagar)
+        SELECT
+            @NuevaExpensaID, -- El ID de la nueva expensa
+            uf.id,           -- El ID de la unidad funcional
+            
+            -- Prorrateo Ordinario
+            ISNULL((@TotalGastoOrd * (uf.porcentajeExpensas / 100)), 0),
+            
+            -- Prorrateo Extraordinario
+            ISNULL((@TotalGastoExt * (uf.porcentajeExpensas / 100)), 0),
+
+            -- Deuda 
+            ISNULL(dma.SaldoDeudor, 0) AS DeudaAnterior,
+
+            -- Interés por Mora
+            CASE
+                WHEN ISNULL(dma.SaldoDeudor, 0) > 0 THEN (ISNULL(dma.SaldoDeudor, 0) * 0.05) 
+                ELSE 0
+            END AS InteresMora,
+            
+            -- Pagos recibidos
+            0.00,
+
+            -- Total a Pagar
+            ( 
+              ISNULL((@TotalGastoOrd * (uf.porcentajeExpensas / 100)), 0) +   -- Gasto Ord
+              ISNULL((@TotalGastoExt * (uf.porcentajeExpensas / 100)), 0) +   -- Gasto Ext
+              ISNULL(dma.SaldoDeudor, 0) +                                    -- Deuda
+              (CASE WHEN ISNULL(dma.SaldoDeudor, 0) > 0 THEN (ISNULL(dma.SaldoDeudor, 0) * 0.05) ELSE 0 END) -- Interés
+            ) AS TotalPagar
+
+        FROM Consorcio.UnidadFuncional AS uf
+            LEFT JOIN DeudaMesAnterior AS dma ON uf.id = dma.idUnidadFuncional
+        WHERE uf.consorcioId = @ConsorcioID;
+
+        PRINT N'Expensas generadas correctamente para ' + CAST(@Anio AS VARCHAR(4)) + '-' + CAST(@Mes AS VARCHAR(2)) + ' (ID: ' + CAST(@NuevaExpensaID AS VARCHAR(10)) + ')';
+
+    END TRY
+    BEGIN CATCH
+        PRINT N'Error al generar las expensas.';
+    END CATCH
+END
+GO
+*/
