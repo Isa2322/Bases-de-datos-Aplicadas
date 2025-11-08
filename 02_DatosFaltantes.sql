@@ -362,53 +362,80 @@ END
 GO
 */
 
+
 --Rellena tabla CuentaBancaria
-CREATE OR ALTER PROCEDURE SP_generadorCuentaBancaria
+CREATE OR ALTER PROCEDURE Operaciones.SP_generadorCuentaBancaria
 AS
 BEGIN
+    SET NOCOUNT ON;
 
-DECLARE @i INT = 1
+    -- Tablas de datos de origen (sin cambios)
+    DECLARE @Nombres TABLE (nombre VARCHAR(20));
+    INSERT INTO @Nombres VALUES ('Juan'),('Maria'),('Carlos'),('Monica'),('Jorge'),
+    ('Lucia'),('Sofia'),('Damian'),('Martina'),('Diego'), ('Barbara'),('Franco'),('Valentina'),('Nicolas'),('Camila');
 
---Maximo de valores generados
-DECLARE @maxi INT = 4 
+    DECLARE @Apellidos TABLE (apellido VARCHAR(20));
+    INSERT INTO @Apellidos VALUES ('Perez'),('Gomez'),('Rodriguez'),('Lopez'),('Fernandez'),
+    ('Garcia'),('Martinez'),('Pereira'),('Romero'),('Torres'), ('Castro'),('Maciel'),('Lipchis'),('Ramos'),('Molina');
 
--- Listas de nombres y apellidos para combinar
-DECLARE @Nombres TABLE (nombre VARCHAR(20));
-INSERT INTO @Nombres VALUES
-('Juan'),('Maria'),('Carlos'),('Monica'),('Jorge'),
-('Lucia'),('Sofia'),('Damian'),('Martina'),('Diego'),
-('Barbara'),('Franco'),('Valentina'),('Nicolas'),('Camila')
+    -- 1. Crear una TABLA TEMPORAL para almacenar los datos generados y el mapeo (RN)
+    IF OBJECT_ID('tempdb..#CuentasGeneradasTemp') IS NOT NULL DROP TABLE #CuentasGeneradasTemp;
 
-DECLARE @Apellidos TABLE (apellido VARCHAR(20));
-INSERT INTO @Apellidos VALUES
-('Perez'),('Gomez'),('Rodriguez'),('Lopez'),('Fernandez'),
-('Garcia'),('Martinez'),('Pereira'),('Romero'),('Torres'),
-('Castro'),('Maciel'),('Lipchis'),('Ramos'),('Molina')
+    CREATE TABLE #CuentasGeneradasTemp (
+        rn INT PRIMARY KEY,
+        CVU_CBU CHAR(22) NOT NULL,
+        nombreTitular VARCHAR(50) NOT NULL,
+        saldo DECIMAL(10, 2)
+    );
 
-WHILE @i <= @maxi
-BEGIN
-	-- Seleccionar nombre y apellido aleatorio
-		DECLARE @nombre VARCHAR(20) = (
-		SELECT TOP 1 nombre FROM @Nombres ORDER BY NEWID())
+    -- 2. Insertar los datos generados en la tabla temporal (Usando la CTE de forma limitada)
+    WITH CTE_Generacion AS (
+        SELECT
+            ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS rn,
+            -- Generar CBU/CVU
+            RIGHT('0000000000000000000000' + 
+                  CAST(ABS(CHECKSUM(NEWID())) % 1000000000000000000000 AS VARCHAR(22)), 22) AS CVU_CBU,
 
-	DECLARE @apellido VARCHAR(20) = (
-		SELECT TOP 1 apellido FROM @Apellidos ORDER BY NEWID())
+            -- Generar Nombre Titular
+            (SELECT TOP 1 n.nombre FROM @Nombres AS n ORDER BY NEWID()) + ' ' + 
+            (SELECT TOP 1 a.apellido FROM @Apellidos AS a ORDER BY NEWID()) AS nombreTitular,
+            
+            -- Generar Saldo
+            CAST(ROUND(((ABS(CHECKSUM(NEWID())) % 49000) + 1000), 2) AS DECIMAL(10,2)) AS saldo
+        
+        -- Generar un registro por cada Consorcio existente
+        FROM Consorcio.Consorcio
+    )
+    INSERT INTO #CuentasGeneradasTemp (rn, CVU_CBU, nombreTitular, saldo)
+    SELECT rn, CVU_CBU, nombreTitular, saldo
+    FROM CTE_Generacion;
 
-	INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular, saldo)
-	VALUES (
-		-- CVU/CBU= 22 digitos aleatorios rellenados con 0 a la izquierda
-		RIGHT('0000000000000000000000' + CAST(ABS(CHECKSUM(NEWID())) % 1000000000000000000000 AS VARCHAR(22)), 22),
+    
+    -- PASO 3: Insertar las cuentas en la tabla permanente
+    INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular, saldo)
+    SELECT 
+        CVU_CBU, 
+        nombreTitular, 
+        saldo
+    FROM #CuentasGeneradasTemp;
 
-		-- Nombre Titular= combinacion nombre + apellido
-		@nombre + ' ' + @apellido,
+    
+    -- PASO 4: Asignar el CVU_CBU al Consorcio correspondiente (AHORA FUNCIONA)
+    -- Usamos la tabla temporal para hacer el JOIN seguro.
+    UPDATE C
+    SET C.CVU_CBU = T.CVU_CBU
+    FROM Consorcio.Consorcio AS C
+    INNER JOIN #CuentasGeneradasTemp AS T ON C.id = T.rn
+    WHERE C.CVU_CBU IS NULL;
+    
+    DECLARE @filasAfectadas INT = @@ROWCOUNT;
+    PRINT CONCAT('Se generaron y asignaron ', @filasAfectadas, ' Cuentas Bancarias a los Consorcios.');
 
-		-- Saldo =numero aleatorio entre 1000 y 50000
-		CAST(ROUND(((RAND(CHECKSUM(NEWID())) * 49000) + 1000), 2) AS DECIMAL(10,2)))
+    DROP TABLE #CuentasGeneradasTemp;
 
-	SET @i += 1;
 END
-END 
 GO
+
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_CargaConsorciosSemilla
 AS
