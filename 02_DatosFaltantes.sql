@@ -394,6 +394,7 @@ GO
 */
 
 
+
 --Rellena tabla CuentaBancaria
 CREATE OR ALTER PROCEDURE Operaciones.SP_generadorCuentaBancaria
 AS

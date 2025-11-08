@@ -14,31 +14,6 @@ Pastori, Ximena - 42300128*/
 USE [Com5600G11]; 
 GO
 
-/* ================================================================================================
-   CONFIGURACIÓN NECESARIA PARA USAR LOS STORED PROCEDURES CON ARCHIVOS EXCEL (.XLSX):
-
-   Los procedures de importacion "Operaciones.sp_ImportarDatosConsorcios_excel" y 
-   "Operaciones.sp_ImportarDatosProveedores_excel" requieren que SQL Server pueda acceder 
-   al archivo de Excel usando el proveedor OLE DB de Microsoft (ACE). 
-
-   Si el proveedor no está instalado o habilitado, utilizar los SP "Operaciones.sp_ImportarDatosConsorcios" y
-   "Operaciones.sp_ImportarDatosProveedores" para la importacion.
-
-   El procedimiento usa el proveedor `Microsoft.ACE.OLEDB.16.0` (versión moderna y más estable)
-
-   Si está instalado, previo a la ejecucion de los SP ejecutar las siguientes sentencias:
-   (Ejecutar con permisos de sysadmin en la base master)
-
-       ```sql
-       EXEC sp_configure 'show advanced options', 1;  
-       RECONFIGURE;
-       EXEC sp_configure 'Ad Hoc Distributed Queries', 1;  
-       RECONFIGURE;
-       EXEC master.dbo.sp_MSset_oledb_prop N'Microsoft.ACE.OLEDB.16.0', N'AllowInProcess', 1;
-       EXEC master.dbo.sp_MSset_oledb_prop N'Microsoft.ACE.OLEDB.16.0', N'DynamicParameters', 1;
-       ```
-   ================================================================================================ */
-
 --Funcion para cargar el archivo pagos_consorcios.csv
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportacionPago (@RutaArchivo VARCHAR(255))
 AS
@@ -224,7 +199,7 @@ BEGIN
 END;
 GO
 
--- servicios.servicios.json 
+-- servicios.servicios.json  ====================================================================
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarGastosMensuales
 ( 
@@ -679,110 +654,107 @@ END
 GO
 
 --===============================================================================================================
-CREATE OR ALTER PROCEDURE Operaciones.sp_CargaInquilinoPropietariosUF
-    @RutaArchivo VARCHAR(255)
+CREATE OR ALTER PROCEDURE Operaciones.sp_CargarUF_Inquilinos
+    @RutaArchivo VARCHAR(500)
 AS
 BEGIN
-    SET NOCOUNT ON; 
+    SET NOCOUNT ON;
 
-    CREATE TABLE #CargaDatosTemp (
-        CVU_CBUPersona CHAR(22),
-        consorcio VARCHAR(50), 
-        numero VARCHAR(10),
-        piso VARCHAR(10),
-        departamento VARCHAR(10)   
-    );
+    DROP TABLE IF EXISTS #TempUFInquilinos;
 
-
-    IF CHARINDEX('''', @RutaArchivo) > 0 OR
-        CHARINDEX('--', @RutaArchivo) > 0 OR
-        CHARINDEX('/*', @RutaArchivo) > 0 OR 
-        CHARINDEX('*/', @RutaArchivo) > 0 OR
-        CHARINDEX(';', @RutaArchivo) > 0
-    BEGIN
-        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
-        RETURN;
-    END
-    ELSE
-    BEGIN
-        DECLARE @SQL NVARCHAR(MAX);
-    
-        SET @SQL = N'
-            BULK INSERT #CargaDatosTemp
-            FROM ''' + @RutaArchivo + '''
-            WITH (
-               FIELDTERMINATOR = ''|'',
-                ROWTERMINATOR = ''\n'',
-                FIRSTROW = 2
-            );';
-
-        EXEC sp_executesql @SQL;
-    END
-
-    CREATE TABLE #ConsorcioTemp (
-        CVU_CBUPersona CHAR(22),
-  	  ID_Consorcio INT,
+    CREATE TABLE #TempUFInquilinos (
+        CVU_CBUPersona VARCHAR(22),
+        nombreConsorcio VARCHAR(100),
         numero VARCHAR(10),
         piso VARCHAR(10),
         departamento VARCHAR(10)
     );
 
-    INSERT INTO #ConsorcioTemp (CVU_CBUPersona, ID_Consorcio, numero, piso, departamento)
-    SELECT 
-		cd.CVU_CBUPersona,
-        c.id,
-        cd.numero,
-        cd.piso,
-        cd.departamento
-    FROM #CargaDatosTemp AS cd
-    JOIN Consorcio.Consorcio AS c ON cd.consorcio = c.nombre;
+        -- sanity check de ruta
+    IF CHARINDEX('''', @RutaArchivo ) > 0 OR
+       CHARINDEX('--', @RutaArchivo ) > 0 OR
+       CHARINDEX('/*', @RutaArchivo ) > 0 OR 
+       CHARINDEX('*/', @RutaArchivo ) > 0 OR
+       CHARINDEX(';',  @RutaArchivo ) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END;
 
-    -- UPDATE para registros existentes
-    UPDATE UF
-    SET 
-        UF.numero = Ctemp.numero,
-        UF.piso = Ctemp.piso,
-        UF.departamento = Ctemp.departamento,
-        UF.consorcioId = Ctemp.ID_Consorcio
-    FROM Consorcio.UnidadFuncional AS UF
-    INNER JOIN #ConsorcioTemp AS Ctemp ON UF.CVU_CBU = Ctemp.CVU_CBUPersona
-    WHERE 
-        UF.numero <> Ctemp.numero OR
-        UF.piso <> Ctemp.piso OR
-        UF.departamento <> Ctemp.departamento OR
-        UF.consorcioId <> Ctemp.ID_Consorcio;
-	
-	INSERT INTO Consorcio.UnidadFuncional (CVU_CBU, numero, piso, departamento, consorcioId, metrosCuadrados, porcentajeExpensas)
-    SELECT 
-        Ctemp.CVU_CBUPersona, 
-        Ctemp.numero, 
-        Ctemp.piso, 
-        Ctemp.departamento, 
-        Ctemp.ID_Consorcio, 
-        0, 
-        0
-    FROM #ConsorcioTemp AS Ctemp
-    WHERE NOT EXISTS (
-        SELECT 1 
-        FROM Consorcio.UnidadFuncional AS UF 
-        WHERE UF.CVU_CBU = Ctemp.CVU_CBUPersona
-    );
+    DECLARE @SQL NVARCHAR(MAX) = N'
+        BULK INSERT #TempUFInquilinos
+        FROM ''' + @RutaArchivo + '''
+        WITH (
+            FIELDTERMINATOR = ''|'',
+            -- CAMBIO CLAVE: Usamos 0x0a (Line Feed) para mayor compatibilidad
+            ROWTERMINATOR = ''\n'', 
+            FIRSTROW = 2
+        );';
+    EXEC sp_executesql @SQL;
 
+    -- DIAGNÓSTICO 1: Filas cargadas en la tabla temporal
+    DECLARE @CargasTemp INT = @@ROWCOUNT;
 
-	DROP TABLE IF EXISTS #CargaDatosTemp;
-	DROP TABLE IF EXISTS #ConsorcioTemp;
+    IF @CargasTemp = 0 
+    BEGIN
+        PRINT CONCAT('ERROR CRÍTICO: BULK INSERT cargó 0 filas. Verifique la ruta del archivo (', @RutaArchivo, ') y los permisos de SQL Server.');
+        DROP TABLE IF EXISTS #TempUFInquilinos;
+        RETURN;
+    END
+    ELSE
+    BEGIN
+        PRINT CONCAT('Filas cargadas en la temporal: ', @CargasTemp);
+    END
+    
+    DECLARE @FilasInsertadas INT;
+    
+    INSERT INTO Consorcio.UnidadFuncional (
+        CVU_CBU,
+        consorcioId,
+        numero,
+        piso,
+        departamento,
+        metrosCuadrados,    
+        porcentajeExpensas, 
+        tipo                
+    )
+    SELECT
+        LTRIM(RTRIM(I.CVU_CBUPersona)) AS CVU_CBU,
+        (
+            SELECT C.id 
+            FROM Consorcio.Consorcio AS C 
+            WHERE LTRIM(RTRIM(I.nombreConsorcio)) = C.nombre
+        )  AS consorcioId,
+        LTRIM(RTRIM(I.numero)),
+        LTRIM(RTRIM(I.piso)),
+        LTRIM(RTRIM(I.departamento)),
+        NULL, -- m2
+        NULL, -- coeficiente
+        NULL  -- tipo
+    FROM #TempUFInquilinos AS I
+
+    -- WHERE EXISTS: Validar Clave Foránea (falla si el CVU/CBU no existe en CuentaBancaria)
+    WHERE NOT EXISTS (
+        SELECT 1 
+        FROM Consorcio.UnidadFuncional AS ExistingUF 
+        WHERE ExistingUF.CVU_CBU = LTRIM(RTRIM(I.CVU_CBUPersona))
+    );
+   
+    SET @FilasInsertadas = @@ROWCOUNT;
+
+    PRINT CONCAT('Filas insertadas en UnidadFuncional: ', @FilasInsertadas);
+    DROP TABLE #TempUFInquilinos;
 END
 GO
 
 --===============================================================================================================
-
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarUFporConsorcio
     @RutaArchivo VARCHAR(500)
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Validación de caracteres peligrosos (sin cambios)
+    -- Validación de caracteres peligrosos
     IF CHARINDEX('''', @RutaArchivo) > 0 OR
        CHARINDEX('--', @RutaArchivo) > 0 OR
        CHARINDEX('/*', @RutaArchivo) > 0 OR 
@@ -793,7 +765,7 @@ BEGIN
         RETURN;
     END
 
-    -- 1. Crear tabla temporal de importación (sin cambios)
+    -- 1. Crear tabla temporal de importación
     IF OBJECT_ID('tempdb..#TemporalUF') IS NOT NULL 
         DROP TABLE #TemporalUF;
 
@@ -810,7 +782,7 @@ BEGIN
         m2_cochera_txt VARCHAR(10)
     );
 
-    -- BULK INSERT (sin cambios)
+    -- BULK INSERT
     DECLARE @SQL NVARCHAR(MAX);
     SET @SQL = '
         BULK INSERT #TemporalUF
@@ -824,17 +796,14 @@ BEGIN
     
     EXEC sp_executesql @SQL;
 
-    select * from #TemporalUF;
-
-    -- ** CORRECCIÓN ERROR 515 (NULOS) **
-    -- Borrar filas que tienen nulos o vacíos en el nombre del consorcio, o la unidad funcional.
+    -- Limpieza inicial de nulos/vacíos
     DELETE FROM #TemporalUF
     WHERE 
         (LTRIM(RTRIM(nombreConsorcio)) IS NULL OR LTRIM(RTRIM(nombreConsorcio)) = '')
         OR
         (LTRIM(RTRIM(nroUnidadFuncional)) IS NULL OR LTRIM(RTRIM(nroUnidadFuncional)) = '');
 
-    -- Insertar consorcios nuevos si no existen
+    -- Insertar consorcios nuevos si no existen (necesario para obtener el consorcioId)
     INSERT INTO Consorcio.Consorcio (nombre, direccion)
     SELECT DISTINCT 
         LTRIM(RTRIM(T.nombreConsorcio)), 
@@ -846,90 +815,67 @@ BEGIN
         WHERE C.nombre = LTRIM(RTRIM(T.nombreConsorcio))
     );
 
-    --------------------------------------------------------------------------------
-    -- 2. Crear y llenar la TABLA TEMPORAL FINAL para persistir los datos limpios --
-    --------------------------------------------------------------------------------
-    IF OBJECT_ID('tempdb..#UFDataLimpia') IS NOT NULL 
+    IF OBJECT_ID('tempdb..#UFDataLimpia') IS NOT NULL 
         DROP TABLE #UFDataLimpia;
+    
+    CREATE TABLE #UFDataLimpia (
+        consorcioId INT NOT NULL,
+        nroUnidadFuncional VARCHAR(50),
+        coeficiente DECIMAL(5, 2),
+        m2_unidad_funcional DECIMAL(10, 2),
+        tipo VARCHAR(20) NOT NULL -- Campo generado
+    );
+
+    -- Insertar datos limpios en la tabla temporal, generando el campo 'tipo'
+    INSERT INTO #UFDataLimpia (consorcioId, nroUnidadFuncional, coeficiente, m2_unidad_funcional, tipo)
+    SELECT
+        C.id AS consorcioId,
+        T.nroUnidadFuncional,
+        CAST(REPLACE(T.coeficiente_txt, ',', '.') AS DECIMAL(5, 2)) AS coeficiente,
+        CAST(REPLACE(T.m2_uf_txt, ',', '.') AS DECIMAL(10, 2)) AS m2_unidad_funcional,
+        -- Lógica de generación de TIPO
+        CASE ABS(CHECKSUM(NEWID())) % 3
+        WHEN 0 THEN 'local'
+        WHEN 1 THEN 'departamento'
+        ELSE 'duplex'
+        END AS tipo
+    FROM #TemporalUF AS T
+    INNER JOIN Consorcio.Consorcio AS C 
+        ON LTRIM(RTRIM(T.nombreConsorcio)) = C.nombre;
     
-    CREATE TABLE #UFDataLimpia (
-        consorcioId INT NOT NULL,
-        CVU_CBU CHAR(22) NULL, -- Debe ser NULL si no hay una asignación inicial
-        nroUnidadFuncional VARCHAR(50),
-        piso VARCHAR(10),
-        departamento VARCHAR(10),
-        coeficiente DECIMAL(5, 2),
-        m2_unidad_funcional DECIMAL(10, 2)
-    );
+    DECLARE @UF_Limpias INT = @@ROWCOUNT;
+    PRINT CONCAT('Filas limpias listas para actualizar: ', @UF_Limpias);
 
-    -- Insertar datos limpios en la tabla temporal, incluyendo el CVU_CBU del Consorcio
-    INSERT INTO #UFDataLimpia (consorcioId, CVU_CBU, nroUnidadFuncional, piso, departamento, coeficiente, m2_unidad_funcional)
-    SELECT
-        C.id AS consorcioId,
-        C.CVU_CBU, -- Obtenemos el CVU del Consorcio
-        T.nroUnidadFuncional,
-        T.piso,
-        T.departamento,
-        CAST(REPLACE(T.coeficiente_txt, ',', '.') AS DECIMAL(5, 2)) AS coeficiente,
-        CAST(REPLACE(T.m2_uf_txt, ',', '.') AS DECIMAL(10, 2)) AS m2_unidad_funcional
-    FROM #TemporalUF AS T
-    INNER JOIN Consorcio.Consorcio AS C 
-        ON LTRIM(RTRIM(T.nombreConsorcio)) = C.nombre;
-
-    --------------------------------------------------------------------------------
-    -- 3. UPDATE de UF existentes (Usando la tabla temporal) -----------------------
-    --------------------------------------------------------------------------------
-    UPDATE Consorcio.UnidadFuncional
+    UPDATE UF
     SET 
-        piso = UFL.piso,
-        departamento = UFL.departamento,
-        porcentajeExpensas = UFL.coeficiente, 
-        metrosCuadrados = UFL.m2_unidad_funcional
+        -- Rellena metrosCuadrados solo si es NULL
+        metrosCuadrados = ISNULL(UF.metrosCuadrados, UFL.m2_unidad_funcional),
         
+        -- Rellena coeficiente (porcentajeExpensas) solo si es NULL
+        porcentajeExpensas = ISNULL(UF.porcentajeExpensas, UFL.coeficiente), 
+        
+        -- Rellena tipo solo si es NULL (usa el valor generado)
+        tipo = ISNULL(UF.tipo, UFL.tipo)
+        
     FROM Consorcio.UnidadFuncional AS UF
     INNER JOIN #UFDataLimpia AS UFL 
         ON UF.consorcioId = UFL.consorcioId 
-        AND UF.numero = UFL.nroUnidadFuncional;
-    
-    --------------------------------------------------------------------------------
-    -- 4. INSERT de UF nuevas (Usando la tabla temporal) --------------------------
-    --------------------------------------------------------------------------------
-    -- ** CORRECCIÓN ERROR 207 (CVU_CBU) y Mapeo completo **
-    INSERT INTO Consorcio.UnidadFuncional (
-        CVU_CBU, 
-        consorcioId,
-        numero,
-        piso,
-        departamento,
-        porcentajeExpensas, 
-        metrosCuadrados,
-        tipo 
-    )
-    SELECT 
-        UFL.CVU_CBU, -- Obtenido de la tabla temporal, que lo tomó de Consorcio.Consorcio
-        UFL.consorcioId,
-        UFL.nroUnidadFuncional,
-        UFL.piso,
-        UFL.departamento,
-        UFL.coeficiente,
-        UFL.m2_unidad_funcional,
-        CASE ABS(CHECKSUM(NEWID())) % 3
-        WHEN 0 THEN 'local'
-        WHEN 1 THEN 'departamento'
-        ELSE 'duplex'
-        END AS tipo
-
-    FROM #UFDataLimpia AS UFL
-    WHERE NOT EXISTS (
-        SELECT 1
-        FROM Consorcio.UnidadFuncional AS UF
-        WHERE UF.consorcioId = UFL.consorcioId
         AND UF.numero = UFL.nroUnidadFuncional
-    );
+        
+    -- Condición para asegurar que solo actualizamos UFs que aún no tienen estos datos
+    -- Esto es opcional, pero hace el UPDATE más eficiente si solo se quiere rellenar NULLs.
+    WHERE UF.metrosCuadrados IS NULL 
+       OR UF.porcentajeExpensas IS NULL 
+       OR UF.tipo IS NULL;
+    
+    DECLARE @UF_Actualizadas INT = @@ROWCOUNT;
+    PRINT CONCAT('Unidades Funcionales actualizadas: ', @UF_Actualizadas);
 
-    -- 5. Limpiar tablas temporales
+    -- 4. Limpiar tablas temporales
     DROP TABLE #TemporalUF;
-    DROP TABLE #UFDataLimpia;
+    DROP TABLE #UFDataLimpia;
+    
+    PRINT 'Proceso de relleno de campos de Unidades Funcionales finalizado.';
 
 END
 GO
