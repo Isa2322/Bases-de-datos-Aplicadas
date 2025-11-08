@@ -498,13 +498,16 @@ GO
 --==================================================================================================================
 --IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios en CSV)
 --Antes de ejecutar esto tiene que estar cargada la tabla de GastoOrdinario
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores
     @rutaArch VARCHAR(1000)
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- valido ruta
+    ------------------------------------------------------------
+    -- 0) Validación simple de la ruta (defensa anti inyección)
+    ------------------------------------------------------------
     IF CHARINDEX('''', @rutaArch) > 0 OR CHARINDEX('--', @rutaArch) > 0 OR
        CHARINDEX('/*', @rutaArch) > 0 OR CHARINDEX('*/', @rutaArch) > 0 OR
        CHARINDEX(';',  @rutaArch) > 0
@@ -513,42 +516,49 @@ BEGIN
         RETURN;
     END;
 
-    -- tabla temporal para importar los datos de una
-    IF OBJECT_ID('tempdb..#TempProveedoresBulk') IS NOT NULL DROP TABLE #Prov_Orig;
+    ------------------------------------------------------------
+    -- 1) Staging original (CSV crudo)
+    ------------------------------------------------------------
+    IF OBJECT_ID('tempdb..#TempProveedoresBulk') IS NOT NULL DROP TABLE #TempProveedoresBulk;
     CREATE TABLE #TempProveedoresBulk
     (
-        tipoGasto VARCHAR(200) NULL,  
-        columnaMixta VARCHAR(400) NULL,  
-        detalleAlternativo VARCHAR(400) NULL,  
-        nomConsorcio VARCHAR(200) NULL   
+        tipoGasto          VARCHAR(200) NULL,    -- ej.: GASTOS BANCARIOS | SERVICIOS PUBLICOS-Agua
+        columnaMixta       VARCHAR(400) NULL,    -- "Proveedor - Detalle" o "Proveedor"
+        detalleAlternativo VARCHAR(400) NULL,    -- tercera columna (si viene)
+        nomConsorcio       VARCHAR(200) NULL
     );
 
-    -- tabla temporal para los datos dsps de procesarlos
-    IF OBJECT_ID('tempdb..#TempProveedoresProc') IS NOT NULL DROP TABLE #Prov_Proc;
+    ------------------------------------------------------------
+    -- 2) Staging procesado (ya normalizado y parseado)
+    ------------------------------------------------------------
+    IF OBJECT_ID('tempdb..#TempProveedoresProc') IS NOT NULL DROP TABLE #TempProveedoresProc;
     CREATE TABLE #TempProveedoresProc
     (
-        tipoGastoFull VARCHAR(200),   
-        tipoBase VARCHAR(200), -- antes del guion (o todo si no hay guion)
-        subTipo VARCHAR(200), -- despues del guion (NULL si no hay)
-        nomEmpresa VARCHAR(400), -- proveedor (antes del guion en columnaMixta, o todo)
-        detalle VARCHAR(400), -- prioridad: detalleAlternativo; si no, lo de despues del guion
-        nomConsorcio VARCHAR(200)
+        tipoGastoFull VARCHAR(200),  -- texto tal cual del CSV (auditoría)
+        tipoBase      VARCHAR(200),  -- antes del guion (o todo si no hay)
+        subTipo       VARCHAR(200),  -- después del guion (Agua/Luz/NULL)
+        tipoParaBD    VARCHAR(200),  -- mapeado a como se llama en tu BD
+        nomEmpresa    VARCHAR(400),  -- proveedor (antes del guion en columnaMixta, o todo)
+        detalle       VARCHAR(400),  -- prioridad: 3ª columna; si no, lo de después del guion
+        nomConsorcio  VARCHAR(200)
     );
 
-    --aca hago el insert
     BEGIN TRY
+        --------------------------------------------------------
+        -- 3) BULK INSERT del CSV
+        --------------------------------------------------------
         DECLARE @sqlBulk NVARCHAR(MAX) = N'
             BULK INSERT #TempProveedoresBulk
             FROM ''' + @rutaArch + N'''
             WITH (
                 FIELDTERMINATOR = '';'',
-                ROWTERMINATOR   = ''0x0a'',
-                FIRSTROW        = 2,
-                CODEPAGE        = ''65001'',
+                ROWTERMINATOR   = ''0x0a'',   -- LF (evita problemas \r\n)
+                FIRSTROW        = 2,          -- saltear encabezado
+                CODEPAGE        = ''65001'',  -- UTF-8
                 TABLOCK, KEEPNULLS
             );';
         EXEC(@sqlBulk);
-    --mensajito para ver si se importaron filas y si no se hizo por que es
+
         DECLARE @bulkRows INT = @@ROWCOUNT;
         IF @bulkRows = 0
         BEGIN
@@ -556,81 +566,104 @@ BEGIN
             RETURN;
         END;
 
-        -- aca agrego una normalizacion basicamente para evitar q se me rechacen los datos por cosas basura, los dejo lo mas limpios posibles
+        --------------------------------------------------------
+        -- 4) Normalización rápida: CR/BOM/espacios
+        --------------------------------------------------------
         UPDATE #TempProveedoresBulk
         SET
-          tipoGasto = LTRIM(RTRIM(REPLACE(REPLACE(tipoGasto, CHAR(13), ''), NCHAR(65279), ''))),
-          columnaMixta = LTRIM(RTRIM(REPLACE(columnaMixta, CHAR(13), ''))),
-          detalleAlternativo = LTRIM(RTRIM(REPLACE(detalleAlternativo, CHAR(13), ''))),
-          nomConsorcio = LTRIM(RTRIM(REPLACE(REPLACE(nomConsorcio, CHAR(13), ''), NCHAR(65279), '')));
+          tipoGasto          = LTRIM(RTRIM(REPLACE(REPLACE(tipoGasto,          CHAR(13), ''), NCHAR(65279), ''))),
+          columnaMixta       = LTRIM(RTRIM(REPLACE(columnaMixta,               CHAR(13), ''))),
+          detalleAlternativo = LTRIM(RTRIM(REPLACE(detalleAlternativo,         CHAR(13), ''))),
+          nomConsorcio       = LTRIM(RTRIM(REPLACE(REPLACE(nomConsorcio,       CHAR(13), ''), NCHAR(65279), '')));
 
-        --aca proceso los datos de la tabla q importe entera, separando la columna mixta y detectando lo de servicio publico con luz y agua
+        --------------------------------------------------------
+        -- 5) Parseo + mapeo de tipos a los nombres reales en BD
+        --------------------------------------------------------
         INSERT INTO #TempProveedoresProc (tipoGastoFull, tipoBase, subTipo, tipoParaBD, nomEmpresa, detalle, nomConsorcio)
         SELECT
-            tipoGastoFull = tb.tipoGasto,
-            tipoBase      = CASE WHEN CHARINDEX('-', tb.tipoGasto) > 0
-                                 THEN LTRIM(RTRIM(LEFT(tb.tipoGasto, CHARINDEX('-', tb.tipoGasto)-1)))
-                                 ELSE tb.tipoGasto END,
-            subTipo       = CASE WHEN CHARINDEX('-', tb.tipoGasto) > 0
-                                 THEN LTRIM(RTRIM(SUBSTRING(tb.tipoGasto, CHARINDEX('-', tb.tipoGasto)+1, 200)))
-                                 ELSE NULL END,
-            -- voy a tener q establecer una relacion entre lo q hay en la tabla original y lo q vino en el archivo pq no tienen exactamente
-            --el mismo nombre y eso hace q no matcheen
-            tipoParaBD    = CASE
-                               WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS DE ADMINISTRACION' THEN 'ADMINISTRACION'
-                               WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS BANCARIOS'         THEN 'BANCARIOS'
-                               WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS DE LIMPIEZA'       THEN 'LIMPIEZA'
-                               WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'SEGUROS'                   THEN 'SEGUROS'
-                               WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI LIKE 'SERVICIOS PUBLICOS-AGUA%' THEN 'SERVICIOS PUBLICOS-Agua'
-                               WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI LIKE 'SERVICIOS PUBLICOS-LUZ%'  THEN 'SERVICIOS PUBLICOS-Luz'
-                               ELSE tb.tipoGasto  -- por si agregás otros ya iguales a la BD
-                            END,
-            nomEmpresa    = CASE WHEN CHARINDEX('-', tb.columnaMixta) > 0
-                                 THEN LTRIM(RTRIM(LEFT(tb.columnaMixta, CHARINDEX('-', tb.columnaMixta) - 1)))
-                                 ELSE LTRIM(RTRIM(tb.columnaMixta)) END,
-            detalle       = CASE
-                               WHEN NULLIF(LTRIM(RTRIM(tb.detalleAlternativo)), '') IS NOT NULL
-                                    THEN LTRIM(RTRIM(tb.detalleAlternativo))
-                               WHEN CHARINDEX('-', tb.columnaMixta) > 0
-                                    THEN LTRIM(RTRIM(SUBSTRING(tb.columnaMixta, CHARINDEX('-', tb.columnaMixta) + 1, 400)))
-                               ELSE NULL
-                            END,
-            nomConsorcio  = tb.nomConsorcio
+            tb.tipoGasto AS tipoGastoFull,
+
+            -- tipoBase / subTipo a partir de tipoGasto (por si viene "SERVICIOS PUBLICOS-Agua")
+            CASE WHEN CHARINDEX('-', tb.tipoGasto) > 0
+                 THEN LTRIM(RTRIM(LEFT(tb.tipoGasto, CHARINDEX('-', tb.tipoGasto)-1)))
+                 ELSE tb.tipoGasto END                       AS tipoBase,
+            CASE WHEN CHARINDEX('-', tb.tipoGasto) > 0
+                 THEN LTRIM(RTRIM(SUBSTRING(tb.tipoGasto, CHARINDEX('-', tb.tipoGasto)+1, 200)))
+                 ELSE NULL END                               AS subTipo,
+
+            -- Mapeo robusto: quita "GASTOS DE " / "GASTOS " y mapea a nombres de la BD
+            CASE
+              WHEN UPPER(REPLACE(REPLACE(LTRIM(RTRIM(tb.tipoGasto)),'GASTOS DE ',''),'GASTOS ','')) COLLATE Latin1_General_CI_AI = 'ADMINISTRACION'
+                   THEN 'ADMINISTRACION'
+              WHEN UPPER(REPLACE(REPLACE(LTRIM(RTRIM(tb.tipoGasto)),'GASTOS DE ',''),'GASTOS ','')) COLLATE Latin1_General_CI_AI = 'BANCARIOS'
+                   THEN 'BANCARIOS'
+              WHEN UPPER(REPLACE(REPLACE(LTRIM(RTRIM(tb.tipoGasto)),'GASTOS DE ',''),'GASTOS ','')) COLLATE Latin1_General_CI_AI = 'LIMPIEZA'
+                   THEN 'LIMPIEZA'
+              WHEN UPPER(REPLACE(REPLACE(LTRIM(RTRIM(tb.tipoGasto)),'GASTOS DE ',''),'GASTOS ','')) COLLATE Latin1_General_CI_AI = 'SEGUROS'
+                   THEN 'SEGUROS'
+              WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI LIKE 'SERVICIOS PUBLICOS-AGUA%'
+                   THEN 'SERVICIOS PUBLICOS-Agua'
+              WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI LIKE 'SERVICIOS PUBLICOS-LUZ%'
+                   THEN 'SERVICIOS PUBLICOS-Luz'
+              WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'SERVICIOS PUBLICOS'
+                   THEN 'SERVICIOS PUBLICOS'
+              ELSE LTRIM(RTRIM(tb.tipoGasto))
+            END                                             AS tipoParaBD,
+
+            -- Empresa: antes del guion de la columnaMixta (o toda si no hay guion)
+            CASE WHEN CHARINDEX('-', tb.columnaMixta) > 0
+                 THEN LTRIM(RTRIM(LEFT(tb.columnaMixta, CHARINDEX('-', tb.columnaMixta) - 1)))
+                 ELSE LTRIM(RTRIM(tb.columnaMixta)) END     AS nomEmpresa,
+
+            -- Detalle: prioridad 1 = tercera columna (si no vacía); si no, lo que está después del guion de columnaMixta
+            CASE
+              WHEN NULLIF(LTRIM(RTRIM(tb.detalleAlternativo)), '') IS NOT NULL
+                   THEN LTRIM(RTRIM(tb.detalleAlternativo))
+              WHEN CHARINDEX('-', tb.columnaMixta) > 0
+                   THEN LTRIM(RTRIM(SUBSTRING(tb.columnaMixta, CHARINDEX('-', tb.columnaMixta) + 1, 400)))
+              ELSE NULL
+            END                                             AS detalle,
+
+            tb.nomConsorcio
         FROM #TempProveedoresBulk tb;
 
-
-        --dsps de tener la tabla procesada con todos los detalles separados voy a hacer el update de gasto ordinario
-        --la logica es joinear con expensa para saber el tipo de gasto y esta con consorcio para saber el nombre del mismo
-        --asi puedo saber segun que tipo de gasto y nombre de consorcio es el nombre de la empresa
+        --------------------------------------------------------
+        -- 6) UPDATE final sobre Negocio.GastoOrdinario
+        --    Join por (Consorcio.nombre, GastoOrdinario.tipoServicio) ya mapeado
+        --------------------------------------------------------
         UPDATE g
         SET 
-            g.nombreEmpresaoPersona = CASE 
-                                        WHEN UPPER(pp.tipoBase) = 'SERVICIOS PUBLICOS' AND UPPER(pp.subTipo) = 'AGUA' THEN 'AYSA'
-                                        WHEN UPPER(pp.tipoBase) = 'SERVICIOS PUBLICOS' AND UPPER(pp.subTipo) = 'LUZ'  THEN 'EDENOR'
-                                        ELSE pp.nomEmpresa
-                                      END,
+            g.nombreEmpresaoPersona =
+                CASE 
+                    WHEN UPPER(pp.tipoBase) = 'SERVICIOS PUBLICOS' AND UPPER(pp.subTipo) = 'AGUA' THEN 'AYSA'
+                    WHEN UPPER(pp.tipoBase) = 'SERVICIOS PUBLICOS' AND UPPER(pp.subTipo) = 'LUZ'  THEN 'EDENOR'
+                    ELSE pp.nomEmpresa
+                END,
             g.detalle = pp.detalle
         FROM Negocio.GastoOrdinario AS g
-        JOIN Negocio.Expensa AS e ON e.id = g.idExpensa
-        JOIN Consorcio.Consorcio AS c ON c.id = e.consorcioId
-        JOIN #TempProveedoresProc AS pp
+        JOIN Negocio.Expensa        AS e  ON e.id = g.idExpensa
+        JOIN Consorcio.Consorcio    AS c  ON c.id = e.consorcioId    -- según tu esquema
+        JOIN #TempProveedoresProc   AS pp
              ON UPPER(LTRIM(RTRIM(g.tipoServicio))) COLLATE Latin1_General_CI_AI
-                = UPPER(LTRIM(RTRIM(pp.tipoGastoFull))) COLLATE Latin1_General_CI_AI
-            AND UPPER(LTRIM(RTRIM(c.nombre))) COLLATE Latin1_General_CI_AI
+                = UPPER(LTRIM(RTRIM(pp.tipoParaBD)))   COLLATE Latin1_General_CI_AI
+            AND UPPER(LTRIM(RTRIM(c.nombre)))          COLLATE Latin1_General_CI_AI
                 = UPPER(LTRIM(RTRIM(pp.nomConsorcio))) COLLATE Latin1_General_CI_AI;
 
         DECLARE @upd INT = @@ROWCOUNT;
         PRINT CONCAT('Filas importadas del CSV: ', @bulkRows);
         PRINT CONCAT('Filas actualizadas en GastoOrdinario: ', @upd);
+
     END TRY
     BEGIN CATCH
         PRINT 'Error durante la importacion de datos de Proveedores:';
         PRINT ERROR_MESSAGE();
     END CATCH;
 
-    --y aca limpio las tablas temporales
-    DROP TABLE IF EXISTS #TempProveedoresBulk;
+    ------------------------------------------------------------
+    -- 7) Limpieza
+    ------------------------------------------------------------
     DROP TABLE IF EXISTS #TempProveedoresProc;
+    DROP TABLE IF EXISTS #TempProveedoresBulk;
 
     SET NOCOUNT OFF;
 END;
