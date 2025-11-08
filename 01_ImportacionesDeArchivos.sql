@@ -615,9 +615,9 @@ BEGIN
             g.detalle = pp.detalle
         FROM Negocio.GastoOrdinario AS g
         JOIN Negocio.Expensa AS e ON e.id = g.idExpensa
-        JOIN Consorcio.Consorcio AS c ON c.id = e.consorcio_id
+        JOIN Consorcio.Consorcio AS c ON c.id = e.consorcioId
         JOIN #TempProveedoresProc AS pp
-             ON UPPER(LTRIM(RTRIM(go.tipoServicio))) COLLATE Latin1_General_CI_AI
+             ON UPPER(LTRIM(RTRIM(g.tipoServicio))) COLLATE Latin1_General_CI_AI
                 = UPPER(LTRIM(RTRIM(pp.tipoGastoFull))) COLLATE Latin1_General_CI_AI
             AND UPPER(LTRIM(RTRIM(c.nombre))) COLLATE Latin1_General_CI_AI
                 = UPPER(LTRIM(RTRIM(pp.nomConsorcio))) COLLATE Latin1_General_CI_AI;
