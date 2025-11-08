@@ -39,53 +39,6 @@ GO
        ```
    ================================================================================================ */
 
-CREATE OR ALTER PROCEDURE Operaciones.ImportarTiposRol
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    -- Inserta el tipo "Inquilino" si no existe
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.TipoRol WHERE nombre = 'Inquilino')
-    BEGIN
-        INSERT INTO Consorcio.TipoRol (nombre, descripcion)
-        VALUES ('Inquilino', 'Persona que alquila una unidad funcional dentro del consorcio.');
-    END
-
-    -- Inserta el tipo "Propietario" si no existe
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.TipoRol WHERE nombre = 'Propietario')
-    BEGIN
-        INSERT INTO Consorcio.TipoRol (nombre, descripcion)
-        VALUES ('Propietario', 'Dueño de una o más unidades funcionales dentro del consorcio.');
-    END
-
-    PRINT N'Carga de datos de Tipos de Rol finalizada.';
-END
-GO
-
--- FORMAS DE PAGO
-CREATE OR ALTER PROCEDURE Pago.ImportacionPago
-	AS
-	BEGIN
-
-    -- Pago en Efectivo (si aplica en la administraci�n)
-    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Efectivo en Oficina')
-    BEGIN
-        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
-        VALUES ('Efectivo en Oficina', 'Recibo Manual');
-    END
-
-    -- Pago Electr�nico (Mercado Pago, otros)
-    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Mercado Pago/Billetera')
-    BEGIN
-        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
-        VALUES ('Mercado Pago/Billetera', 'ID de Transacci�n');
-    END
-
-    PRINT N'Carga de datos de Formas de Pago finalizada.';
-
-END
-GO
-
 --Funcion para cargar el archivo pagos_consorcios.csv
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportacionPago @RutaArchivo VARCHAR(255)
 AS
@@ -308,7 +261,7 @@ BEGIN
     end
     
     -- Bloque de Inserción
-    BEGIN TRY
+
         INSERT INTO Negocio.GastoOrdinario (
             idExpensa, 
             nombreEmpresaoPersona,
@@ -358,22 +311,13 @@ BEGIN
             -- evitar duplicado por Tipo de Gasto/Expensa
             WHERE NOT EXISTS (
                 SELECT 1 
-                FROM Negocio.GastoOrdinario AS GO
-                WHERE GO.idExpensa = E.id 
-                AND GO.tipoServicio = S.TipoGastoBruto
+                FROM Negocio.GastoOrdinario AS GA
+                WHERE GA.idExpensa = E.id 
+                AND GA.tipoServicio = S.TipoGastoBruto
             )
             AND E.id IS NOT NULL;  
-    END TRY
-    BEGIN CATCH
-        IF ERROR_NUMBER() = 2627 
-        BEGIN
-             RAISERROR('Error: Se encontró un número de factura duplicado al generar datos. La inserción falló parcialmente.', 16, 1);
-        END
-        ELSE
-        BEGIN
-             THROW;
-        END
-    END CATCH
+    END 
+    
     
     DROP TABLE #TemporalDatosServicio;
 
@@ -483,7 +427,7 @@ END
 END;
 GO
 
-
+/*
 --_____________________________________________________________________________________________________________________________________
 --IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)____________________________________________________________________________
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
@@ -548,13 +492,7 @@ BEGIN
 
 END
 GO
-
-/*  PRUEBO SP
-DECLARE @rutaArchCSV VARCHAR(1000)
-SET @rutaArchCSV = 'C:\Users\camil\OneDrive\Escritorio\Facultad\BDD\datos varios(Consorcios).csv'
-EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
 */
-
 --_____________________________________________________________________________________________________________________________________________________________
 --IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios)____________________________________________________________________________________________________
 --CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARCHAR(1000)
@@ -756,11 +694,7 @@ BEGIN
 END;
 GO
 
-/*  PRUEBO SP
-EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\consorcios\datos varios(Proveedores).csv'
-SELECT * FROM Negocio.GastoOrdinario
-*/
-
+/*
 --===============================================================================================================
 -- IMPORTACION DIRECTAMENTE DESDE EL EXCEL PARA CONSORCIOS
 
@@ -926,6 +860,7 @@ BEGIN
     DROP TABLE #TempProveedoresGastoProcesado;
 END;
 GO
+*/
 
 --===============================================================================================================
 CREATE OR ALTER PROCEDURE Operaciones.sp_CargaInquilinoPropietariosUF
@@ -1127,3 +1062,5 @@ BEGIN
 
 END;
 GO
+
+
