@@ -565,53 +565,50 @@ BEGIN
           nomConsorcio = LTRIM(RTRIM(REPLACE(REPLACE(nomConsorcio, CHAR(13), ''), NCHAR(65279), '')));
 
         --aca proceso los datos de la tabla q importe entera, separando la columna mixta y detectando lo de servicio publico con luz y agua
-        INSERT INTO #TempProveedoresProc (tipoGastoFull, tipoBase, subTipo, nomEmpresa, detalle, nomConsorcio)
+        INSERT INTO #TempProveedoresProc (tipoGastoFull, tipoBase, subTipo, tipoParaBD, nomEmpresa, detalle, nomConsorcio)
         SELECT
-            -- tipo full para joinear 1:1 con GO.tipoServicio
-            tipoGastoFull = tipoGasto,
-            --ESTA PARTE DE ACA ES LA Q DETECTA SI EL SERVICIO PUBLICO ES LUZ O AGUA
-            -- base: antes del guion me quedo ese pedacito, si no hay, queda todo
-            tipoBase = CASE WHEN CHARINDEX('-', tipoGasto) > 0
-                            THEN LTRIM(RTRIM(LEFT(tipoGasto, CHARINDEX('-', tipoGasto) - 1)))
-                            ELSE tipoGasto 
-                        END,
-            -- subTipo: despues del guion, si no hay, NULL
-            subTipo = CASE WHEN CHARINDEX('-', tipoGasto) > 0
-                           THEN LTRIM(RTRIM(SUBSTRING(tipoGasto, CHARINDEX('-', tipoGasto) + 1, 200)))
-                           ELSE NULL 
-                        END,
-            -- nomEmpresa: antes del guion en columnaMixta (o todo si no hay)
-            nomEmpresa = CASE WHEN CHARINDEX('-', columnaMixta) > 0
-                              THEN LTRIM(RTRIM(LEFT(columnaMixta, CHARINDEX('-', columnaMixta) - 1)))
-                              ELSE LTRIM(RTRIM(columnaMixta)) 
+            tipoGastoFull = tb.tipoGasto,
+            tipoBase      = CASE WHEN CHARINDEX('-', tb.tipoGasto) > 0
+                                 THEN LTRIM(RTRIM(LEFT(tb.tipoGasto, CHARINDEX('-', tb.tipoGasto)-1)))
+                                 ELSE tb.tipoGasto END,
+            subTipo       = CASE WHEN CHARINDEX('-', tb.tipoGasto) > 0
+                                 THEN LTRIM(RTRIM(SUBSTRING(tb.tipoGasto, CHARINDEX('-', tb.tipoGasto)+1, 200)))
+                                 ELSE NULL END,
+            -- voy a tener q establecer una relacion entre lo q hay en la tabla original y lo q vino en el archivo pq no tienen exactamente
+            --el mismo nombre y eso hace q no matcheen
+            tipoParaBD    = CASE
+                               WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS DE ADMINISTRACION' THEN 'ADMINISTRACION'
+                               WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS BANCARIOS'         THEN 'BANCARIOS'
+                               WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS DE LIMPIEZA'       THEN 'LIMPIEZA'
+                               WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'SEGUROS'                   THEN 'SEGUROS'
+                               WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI LIKE 'SERVICIOS PUBLICOS-AGUA%' THEN 'SERVICIOS PUBLICOS-Agua'
+                               WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI LIKE 'SERVICIOS PUBLICOS-LUZ%'  THEN 'SERVICIOS PUBLICOS-Luz'
+                               ELSE tb.tipoGasto  -- por si agregás otros ya iguales a la BD
                             END,
-            -- detalle: me fijo si hay algo en la tabla detalle (si es asi me quedo eso), sino es lo q viene dsps del guion
-            detalle = CASE
-                        WHEN NULLIF(LTRIM(RTRIM(detalleAlternativo)), '') IS NOT NULL
-                        THEN LTRIM(RTRIM(detalleAlternativo))
-                        WHEN CHARINDEX('-', columnaMixta) > 0
-                        THEN LTRIM(RTRIM(SUBSTRING(columnaMixta, CHARINDEX('-', columnaMixta) + 1, 400)))
-                        ELSE NULL
-                      END,
-            nomConsorcio  = nomConsorcio
-        FROM #TempProveedoresBulk;
+            nomEmpresa    = CASE WHEN CHARINDEX('-', tb.columnaMixta) > 0
+                                 THEN LTRIM(RTRIM(LEFT(tb.columnaMixta, CHARINDEX('-', tb.columnaMixta) - 1)))
+                                 ELSE LTRIM(RTRIM(tb.columnaMixta)) END,
+            detalle       = CASE
+                               WHEN NULLIF(LTRIM(RTRIM(tb.detalleAlternativo)), '') IS NOT NULL
+                                    THEN LTRIM(RTRIM(tb.detalleAlternativo))
+                               WHEN CHARINDEX('-', tb.columnaMixta) > 0
+                                    THEN LTRIM(RTRIM(SUBSTRING(tb.columnaMixta, CHARINDEX('-', tb.columnaMixta) + 1, 400)))
+                               ELSE NULL
+                            END,
+            nomConsorcio  = tb.nomConsorcio
+        FROM #TempProveedoresBulk tb;
+
 
         --dsps de tener la tabla procesada con todos los detalles separados voy a hacer el update de gasto ordinario
         --la logica es joinear con expensa para saber el tipo de gasto y esta con consorcio para saber el nombre del mismo
         --asi puedo saber segun que tipo de gasto y nombre de consorcio es el nombre de la empresa
         UPDATE g
         SET 
-            g.nombreEmpresaoPersona =
-                CASE 
-                --aca toqueteo el collate para asegurarme no tener problemas por acentos o minusculas en esta consulta particular
-                    WHEN UPPER(pp.tipoBase) COLLATE Latin1_General_CI_AI = 'SERVICIOS PUBLICOS'
-                     AND UPPER(pp.subTipo) COLLATE Latin1_General_CI_AI = 'AGUA'
-                        THEN 'AYSA'
-                    WHEN UPPER(pp.tipoBase) COLLATE Latin1_General_CI_AI = 'SERVICIOS PUBLICOS'
-                     AND UPPER(pp.subTipo) COLLATE Latin1_General_CI_AI = 'LUZ'
-                        THEN 'EDENOR'
-                    ELSE pp.nomEmpresa
-                END,
+            g.nombreEmpresaoPersona = CASE 
+                                        WHEN UPPER(pp.tipoBase) = 'SERVICIOS PUBLICOS' AND UPPER(pp.subTipo) = 'AGUA' THEN 'AYSA'
+                                        WHEN UPPER(pp.tipoBase) = 'SERVICIOS PUBLICOS' AND UPPER(pp.subTipo) = 'LUZ'  THEN 'EDENOR'
+                                        ELSE pp.nomEmpresa
+                                      END,
             g.detalle = pp.detalle
         FROM Negocio.GastoOrdinario AS g
         JOIN Negocio.Expensa AS e ON e.id = g.idExpensa
