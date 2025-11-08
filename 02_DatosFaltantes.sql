@@ -42,11 +42,11 @@ GO
 
 -- FORMAS DE PAGO
 
-IF OBJECT_ID('SP_CrearYcargar_FormasDePago_Semilla', 'P') IS NOT NULL
-    DROP PROCEDURE SP_CrearYcargar_FormasDePago_Semilla
+IF OBJECT_ID('Operaciones.SP_CrearYcargar_FormasDePago_Semilla', 'P') IS NOT NULL
+    DROP PROCEDURE Operaciones.SP_CrearYcargar_FormasDePago_Semilla
 GO
 
-CREATE PROCEDURE SP_CrearYcargar_FormasDePago_Semilla
+CREATE PROCEDURE Operaciones.SP_CrearYcargar_FormasDePago_Semilla
 AS
 BEGIN
     
