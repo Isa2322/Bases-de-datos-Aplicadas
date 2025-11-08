@@ -468,97 +468,76 @@ END
 GO
 
 
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_CargaConsorciosSemilla
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    PRINT N'Insertando/Verificando datos semilla en Consorcio.Consorcio...';
+    PRINT N'Insertando datos semilla de Consorcios...';
 
+    DECLARE @cvu CHAR(22);
+	--Consorcio 1: Azcuenaga
     IF NOT EXISTS (SELECT 1 FROM Consorcio.Consorcio WHERE nombre = 'Azcuenaga')
     BEGIN
-        INSERT INTO Consorcio.Consorcio (nombre, direccion)
-        VALUES ('Azcuenaga', 'Dirección desconocida');
+        SET @cvu = RIGHT('00000000000000000000' + CAST(ABS(CHECKSUM(NEWID())) AS VARCHAR(20)), 22);
+        IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = @cvu)
+            INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular, saldo)
+            VALUES (@cvu, 'Consorcio Azcuenaga', 0);
+
+        INSERT INTO Consorcio.Consorcio (nombre, direccion, CVU_CBU, metrosCuadradosTotal)
+        VALUES ('Azcuenaga', 'Belgrano 3344', @cvu, 1281);
     END
 
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.Consorcio WHERE nombre = 'Torre Central')
+    --  Consorcio 2: Alzaga
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.Consorcio WHERE nombre = 'Alzaga')
     BEGIN
-        INSERT INTO Consorcio.Consorcio (nombre, direccion)
-        VALUES ('Torre Central', 'Dirección desconocida');
+        SET @cvu = RIGHT('00000000000000000000' + CAST(ABS(CHECKSUM(NEWID())) AS VARCHAR(20)), 22);
+        IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = @cvu)
+            INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular, saldo)
+            VALUES (@cvu, 'Consorcio Alzaga', 0);
+
+        INSERT INTO Consorcio.Consorcio (nombre, direccion, CVU_CBU, metrosCuadradosTotal)
+        VALUES ('Alzaga', 'Callao 1122', @cvu, 914);
     END
 
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.Consorcio WHERE nombre = 'Edificio Mitre')
+    --  Consorcio 3: Alberdi
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.Consorcio WHERE nombre = 'Alberdi')
     BEGIN
-        INSERT INTO Consorcio.Consorcio (nombre, direccion)
-        VALUES ('Edificio Mitre', 'Dirección desconocida');
+        SET @cvu = RIGHT('00000000000000000000' + CAST(ABS(CHECKSUM(NEWID())) AS VARCHAR(20)), 22);
+        IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = @cvu)
+            INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular, saldo)
+            VALUES (@cvu, 'Consorcio Alberdi', 0);
+
+        INSERT INTO Consorcio.Consorcio (nombre, direccion, CVU_CBU, metrosCuadradosTotal)
+        VALUES ('Alberdi', 'Santa Fe 910', @cvu, 784);
     END
 
-    PRINT N'Carga de datos semilla de Consorcios finalizada.';
-END
-GO
-
-CREATE OR ALTER PROCEDURE Operaciones.sp_CargaCuentasBancariasSemilla
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    PRINT N'Insertando/Verificando datos semilla en Consorcio.CuentaBancaria...';
-
-    DECLARE @i INT = 1;
-    DECLARE @max INT = 6;
-
-    -- Cuentas para Azcuenaga
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100010000000101')
+    --  Consorcio 4: Unzue
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.Consorcio WHERE nombre = 'Unzue')
     BEGIN
-        INSERT INTO Consorcio.CuentaBancaria (CVU_CBU)
-        VALUES ('0000003100010000000101');
+        SET @cvu = RIGHT('00000000000000000000' + CAST(ABS(CHECKSUM(NEWID())) AS VARCHAR(20)), 22);
+        IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = @cvu)
+            INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular, saldo)
+            VALUES (@cvu, 'Consorcio Unzue', 0);
+
+        INSERT INTO Consorcio.Consorcio (nombre, direccion, CVU_CBU, metrosCuadradosTotal)
+        VALUES ('Unzue', 'Corrientes 5678', @cvu, 1316);
     END
 
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100010000000102')
+    -- Consorcio 5: Pereyra Iraola
+    IF NOT EXISTS (SELECT 1 FROM Consorcio.Consorcio WHERE nombre = 'Pereyra Iraola')
     BEGIN
-        INSERT INTO Consorcio.CuentaBancaria (CVU_CBU)
-        VALUES ('0000003100010000000102');
+        SET @cvu = RIGHT('00000000000000000000' + CAST(ABS(CHECKSUM(NEWID())) AS VARCHAR(20)), 22);
+        IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = @cvu)
+            INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular, saldo)
+            VALUES (@cvu, 'Consorcio Pereyra Iraola', 0);
+
+        INSERT INTO Consorcio.Consorcio (nombre, direccion, CVU_CBU, metrosCuadradosTotal)
+        VALUES ('Pereyra Iraola', 'Rivadavia 1234', @cvu, 1691);
     END
 
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100010000000103')
-    BEGIN
-        INSERT INTO Consorcio.CuentaBancaria (CVU_CBU)
-        VALUES ('0000003100010000000103');
-    END
-
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100010000000104')
-    BEGIN
-        INSERT INTO Consorcio.CuentaBancaria (CVU_CBU)
-        VALUES ('0000003100010000000104');
-    END
-
-    PRINT '  >> Cuentas bancarias de "Azcuenaga" insertadas (4 cuentas).';
-
-    -- Cuentas para Torre Central
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100020000000201')
-    BEGIN
-        INSERT INTO Consorcio.CuentaBancaria (CVU_CBU)
-        VALUES ('0000003100020000000201');
-    END
-
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100020000000202')
-    BEGIN
-        INSERT INTO Consorcio.CuentaBancaria (CVU_CBU)
-        VALUES ('0000003100020000000202');
-    END
-
-    PRINT '  >> Cuentas bancarias de "Torre Central" insertadas (2 cuentas).';
-
-    -- Cuenta para Edificio Mitre
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100030000000301')
-    BEGIN
-        INSERT INTO Consorcio.CuentaBancaria (CVU_CBU)
-        VALUES ('0000003100030000000301');
-    END
-
-    PRINT '  >> Cuenta bancaria de "Edificio Mitre" insertada (1 cuenta).';
-
-    PRINT N'Carga de datos semilla de Cuentas Bancarias finalizada.';
+    PRINT N' Carga de datos semilla de Consorcios finalizada exitosamente.';
 END
 GO
 
@@ -567,120 +546,90 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    PRINT N'Insertando/Verificando datos semilla en Consorcio.UnidadFuncional...';
+    PRINT N'Insertando unidades funcionales aleatorias por consorcio...';
 
-    DECLARE @idAzcuenaga INT;
-    DECLARE @idTorreCentral INT;
-    DECLARE @idEdificioMitre INT;
+    DECLARE @consorcioId INT;
+    DECLARE @nombre NVARCHAR(100);
+    DECLARE @contador INT;
+    DECLARE @cvu CHAR(22);
+    DECLARE @piso VARCHAR(10);
+    DECLARE @depto VARCHAR(10);
+    DECLARE @numero VARCHAR(10);
+    DECLARE @metros DECIMAL(10,2);
+    DECLARE @porcentaje DECIMAL(5,2);
+    DECLARE @tipo VARCHAR(50);
 
-    -- Obtener IDs de los consorcios
-    SELECT @idAzcuenaga = id FROM Consorcio.Consorcio WHERE nombre = 'Azcuenaga';
-    SELECT @idTorreCentral = id FROM Consorcio.Consorcio WHERE nombre = 'Torre Central';
-    SELECT @idEdificioMitre = id FROM Consorcio.Consorcio WHERE nombre = 'Edificio Mitre';
+    -- Tabla temporal con tipos de unidad
+    DECLARE @tipos TABLE (tipo VARCHAR(50));
+    INSERT INTO @tipos (tipo)
+    VALUES ('Departamento'), ('Dúplex'), ('Local'), ('Oficina'), ('Monoambiente');
 
-    IF @idAzcuenaga IS NULL
+    -- Cursor para recorrer todos los consorcios
+    DECLARE consorcios_cursor CURSOR FOR
+        SELECT id, nombre FROM Consorcio.Consorcio;
+
+    OPEN consorcios_cursor;
+    FETCH NEXT FROM consorcios_cursor INTO @consorcioId, @nombre;
+
+    WHILE @@FETCH_STATUS = 0
     BEGIN
-        RAISERROR('Error: El consorcio "Azcuenaga" no existe. Ejecute primero sp_CargaConsorciosSemilla.', 16, 1);
-        RETURN;
-    END
+        PRINT CONCAT('>> Generando unidades funcionales para el consorcio: ', @nombre);
 
-    -- Verificar que existan las cuentas bancarias
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = '0000003100010000000101')
-    BEGIN
-        RAISERROR('Error: Las cuentas bancarias no existen. Ejecute primero sp_CargaCuentasBancariasSemilla.', 16, 1);
-        RETURN;
-    END
+        SET @contador = 1;
 
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.UnidadFuncional WHERE CVU_CBU = '0000003100010000000101')
-    BEGIN
-        INSERT INTO Consorcio.UnidadFuncional (
-            CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas
-        )
-        VALUES (
-            '0000003100010000000101', @idAzcuenaga, '1', 'PB', 'A', 45.00, 4.4
-        );
-    END
-
-    -- UF 2 - PB B (45 m², coeficiente 4.4)
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.UnidadFuncional WHERE CVU_CBU = '0000003100010000000102')
-    BEGIN
-        INSERT INTO Consorcio.UnidadFuncional (
-            CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas
-        )
-        VALUES (
-            '0000003100010000000102', @idAzcuenaga, '2', 'PB', 'B', 45.00, 4.4
-        );
-    END
-
-    -- UF 3 - PB C (45 m², coeficiente 4.4)
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.UnidadFuncional WHERE CVU_CBU = '0000003100010000000103')
-    BEGIN
-        INSERT INTO Consorcio.UnidadFuncional (
-            CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas
-        )
-        VALUES (
-            '0000003100010000000103', @idAzcuenaga, '3', 'PB', 'C', 45.00, 4.4
-        );
-    END
-
-    -- UF 4 - PB D (45 m², coeficiente 4.4)
-    IF NOT EXISTS (SELECT 1 FROM Consorcio.UnidadFuncional WHERE CVU_CBU = '0000003100010000000104')
-    BEGIN
-        INSERT INTO Consorcio.UnidadFuncional (
-            CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas
-        )
-        VALUES (
-            '0000003100010000000104', @idAzcuenaga, '4', 'PB', 'D', 45.00, 4.4
-        );
-    END
-
-    PRINT '  >> Unidades Funcionales de "Azcuenaga" insertadas (4 UFs - PB A/B/C/D, coeficiente 4.4 c/u).';
-    
-    IF @idTorreCentral IS NOT NULL
-    BEGIN
-        -- UF 1 - Piso 1 A (60 m²)
-        IF NOT EXISTS (SELECT 1 FROM Consorcio.UnidadFuncional WHERE CVU_CBU = '0000003100020000000201')
+        WHILE @contador <= 10
         BEGIN
-            INSERT INTO Consorcio.UnidadFuncional (
-                CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas
+            -- Generar CVU único
+            SET @cvu = RIGHT('00000000000000000000' + CAST(ABS(CHECKSUM(NEWID())) AS VARCHAR(20)), 22);
+
+            -- Crear cuenta bancaria si no existe
+            IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = @cvu)
+            BEGIN
+                INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular, saldo)
+                VALUES (@cvu, CONCAT('Titular_', @cvu), 0);
+            END
+
+            -- Generar datos aleatorios de la unidad
+            SET @piso = CAST(CEILING(RAND(CHECKSUM(NEWID())) * 5) AS VARCHAR(10));
+            SET @depto = CHAR(64 + @contador); -- A, B, C...
+            SET @numero = CAST(@contador AS VARCHAR(10));
+            SET @metros = CAST(40 + RAND(CHECKSUM(NEWID())) * 60 AS DECIMAL(10,2));
+            SET @porcentaje = CAST(RAND(CHECKSUM(NEWID())) * 10 AS DECIMAL(5,2));
+
+            -- Elegir tipo aleatorio
+            SELECT TOP 1 @tipo = tipo FROM @tipos ORDER BY NEWID();
+
+            -- Insertar la unidad funcional
+            INSERT INTO Consorcio.UnidadFuncional
+            (
+                CVU_CBU, consorcioId, numero, piso, departamento,
+                metrosCuadrados, porcentajeExpensas, tipo
             )
-            VALUES (
-                '0000003100020000000201', @idTorreCentral, '1', '1', 'A', 60.00, 52.17
+            VALUES
+            (
+                @cvu, 
+                @consorcioId, 
+                @numero, 
+                @piso, 
+                @depto,
+                @metros, 
+                @porcentaje,
+                @tipo
             );
-        END
 
-        -- UF 2 - Piso 1 B (55 m²)
-        IF NOT EXISTS (SELECT 1 FROM Consorcio.UnidadFuncional WHERE CVU_CBU = '0000003100020000000202')
-        BEGIN
-            INSERT INTO Consorcio.UnidadFuncional (
-                CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas
-            )
-            VALUES (
-                '0000003100020000000202', @idTorreCentral, '2', '1', 'B', 55.00, 47.83
-            );
-        END
+            SET @contador = @contador + 1;
+        END;
 
-        PRINT '  >> Unidades Funcionales de "Torre Central" insertadas (2 UFs, 52.17% y 47.83%).';
-    END
-    
-    IF @idEdificioMitre IS NOT NULL
-    BEGIN
-        -- UF 1 - Piso 2 A (70 m²)
-        IF NOT EXISTS (SELECT 1 FROM Consorcio.UnidadFuncional WHERE CVU_CBU = '0000003100030000000301')
-        BEGIN
-            INSERT INTO Consorcio.UnidadFuncional (
-                CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas
-            )
-            VALUES (
-                '0000003100030000000301', @idEdificioMitre, '1', '2', 'A', 70.00, 100.00
-            );
-        END
+        PRINT CONCAT('   >> Se cargaron 10 unidades para el consorcio ', @nombre, '.');
 
-        PRINT '  >> Unidades Funcionales de "Edificio Mitre" insertadas (1 UF, 100%).';
-    END
+        FETCH NEXT FROM consorcios_cursor INTO @consorcioId, @nombre;
+    END;
 
-    PRINT N'Carga de datos semilla de Unidades Funcionales finalizada.';
-END
+    CLOSE consorcios_cursor;
+    DEALLOCATE consorcios_cursor;
+
+    PRINT N'Carga de unidades funcionales aleatorias finalizada correctamente.';
+END;
 GO
 -- =============================================
 -- Generador de expensas
