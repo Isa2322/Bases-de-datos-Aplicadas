@@ -260,13 +260,88 @@ END
 GO
 
 
-USE [Com5600G11];
-GO
+/*USE [Com5600G11];
+GO*/
 
 -- =============================================
 -- CARGA DE GASTOS EXTRAORDINARIOS
 -- =============================================
+--NUEVO--
+CREATE OR ALTER PROCEDURE Negocio.sp_CargarGastosExtraordinarios
+AS
+BEGIN
+    SET NOCOUNT ON;
+    PRINT N' Generando gastos extraordinarios...';
 
+    DECLARE @i INT = 1;
+    DECLARE @total INT = 20; -- cantidad de registros a generar
+    DECLARE @consorcioId INT;
+    DECLARE @detalle NVARCHAR(200);
+    DECLARE @importeTotal DECIMAL(18,2);
+    DECLARE @fechaEmision DATE;
+    DECLARE @nombreEmpresaOPersona NVARCHAR(100);
+    DECLARE @esPagoTotal BIT;
+    DECLARE @nroCuota INT;
+    DECLARE @totalCuota DECIMAL(18,2);
+    DECLARE @nroFactura CHAR(10);
+    DECLARE @idExpensa INT;
+
+    WHILE @i <= @total
+    BEGIN
+        -- Elegimos un consorcio y expensa existente
+        SET @consorcioId = (SELECT TOP 1 id FROM Consorcio.Consorcio ORDER BY NEWID());
+        SET @idExpensa = (SELECT TOP 1 id FROM Negocio.Expensa ORDER BY NEWID());
+
+        -- Descripciones aleatorias
+        DECLARE @detalles TABLE (detalle NVARCHAR(200));
+        INSERT INTO @detalles VALUES
+            ('Reparación del ascensor'),
+            ('Pintura general de fachada'),
+            ('Cambio de portero eléctrico'),
+            ('Impermeabilización de terraza'),
+            ('Renovación del hall de entrada'),
+            ('Reemplazo de cañerías de gas'),
+            ('Instalación de cámaras de seguridad'),
+            ('Reacondicionamiento de cocheras'),
+            ('Colocación de luces LED en pasillos'),
+            ('Modernización del tablero eléctrico');
+
+        SET @detalle = (SELECT TOP 1 detalle FROM @detalles ORDER BY NEWID());
+
+        -- Empresas aleatorias
+        DECLARE @empresas TABLE (nombre NVARCHAR(100));
+        INSERT INTO @empresas VALUES
+            ('ObraFina S.A.'), ('ConstruRed SRL'), ('TecnoPortones'),
+            ('AquaService'), ('ColorSur Pinturas'), ('SafeCam Systems'),
+            ('ElectroRed S.A.'), ('GasSur SRL'), ('Impermeables S.A.'), ('Mantenimiento XXI');
+
+        SET @nombreEmpresaOPersona = (SELECT TOP 1 nombre FROM @empresas ORDER BY NEWID());
+
+        -- Datos aleatorios
+        SET @importeTotal = (RAND(CHECKSUM(NEWID())) * 500000) + 50000;
+        SET @fechaEmision = DATEADD(DAY, -ABS(CHECKSUM(NEWID()) % 180), GETDATE());
+        SET @esPagoTotal = CASE WHEN RAND() > 0.5 THEN 1 ELSE 0 END;
+        SET @nroCuota = CASE WHEN @esPagoTotal = 1 THEN NULL ELSE (ABS(CHECKSUM(NEWID()) % 5) + 1) END;
+        SET @totalCuota = CASE WHEN @esPagoTotal = 1 THEN @importeTotal ELSE @importeTotal / ISNULL(@nroCuota, 1) END;
+        SET @nroFactura = RIGHT('0000000000' + CAST(ABS(CHECKSUM(NEWID()) % 9999999999) AS VARCHAR(10)), 10);
+
+        -- Insertar en GastoExtraordinario
+        INSERT INTO Negocio.GastoExtraordinario
+            (idExpensa, consorcioId, nroFactura, nombreEmpresaOPersona,
+             fechaEmision, importeTotal, detalle, esPagoTotal, nroCuota, totalCuota)
+        VALUES
+            (@idExpensa, @consorcioId, @nroFactura, @nombreEmpresaOPersona,
+             @fechaEmision, @importeTotal, @detalle, @esPagoTotal, @nroCuota, @totalCuota);
+
+        SET @i += 1;
+    END;
+
+    PRINT N'Carga de gastos extraordinarios completada.';
+END;
+GO
+
+
+/*
 INSERT INTO Negocio.GastoExtraordinario
     (detalle, importeTotal, fechaEmision, nombreEmpresaoPersona, esPagoTotal, nroCuota, totalCuota)
 VALUES
@@ -289,12 +364,14 @@ VALUES
 -- 🔹 PEREYRA IRAOLA (id 5)
 ('Colocación de cámaras de seguridad IP',  310000.00, '2024-04-14', 'SafeCam Systems', 1, NULL, 0),
 ('Cambio de cañerías de gas en planta baja',  415000.00, '2024-06-10', 'GasSur SRL', 1, 2, 46111.11);
-GO
+GO*/
+
+
 -- =============================================
 -- ====cambio en la tabla de aplicar pagos======
 -- =============================================
 
-/*
+
 
 /*
     Resumen de cambios: 
@@ -308,8 +385,71 @@ GO
 
 */
 
--- CAmbiaria nombre a aplicarPagos solamente
+--NUEVO--
 CREATE OR ALTER PROCEDURE Operaciones.sp_AplicarPagosACuentas
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @FilasAfectadas INT = 0;
+
+    -- Insertar en Pago.PagoAplicado relacionando el pago con su detalle de expensa
+    INSERT INTO Pago.PagoAplicado (
+        idPago, 
+        idDetalleExpensa, 
+        importeAplicado
+    )
+    SELECT
+        P.id AS idPago,
+        DE.id AS idDetalleExpensa,
+        P.importe AS importeAplicado
+    FROM Pago.Pago AS P -- 1. Pagos realizados
+    
+    -- 2. Encontrar la Unidad Funcional (UF) dueña del CVU/CBU de origen del pago
+    INNER JOIN Consorcio.UnidadFuncional AS UF 
+        ON P.cbuCuentaOrigen = UF.CVU_CBU 
+        
+    -- 3. Encontrar el Detalle de Expensa (DE) correspondiente a esa UF
+    INNER JOIN Negocio.DetalleExpensa AS DE
+        ON DE.idUnidadFuncional = UF.id
+        
+    -- 4. Encontrar la Expensa (E) para verificar el período
+    INNER JOIN Negocio.Expensa AS E
+        ON DE.expensaId = E.id
+    
+    WHERE 
+        -- LÓGICA DE APLICACIÓN DEL PERÍODO (Mes de Pago = Mes de Vencimiento de Expensa)
+        -- Si el pago se hace en el mes M, se aplica a la expensa generada para el periodo M-1.
+        E.fechaPeriodoAnio = 
+            CASE 
+                -- Si el pago se hace en enero, se aplica a la expensa de diciembre del año anterior.
+                WHEN MONTH(P.fecha) = 1 THEN YEAR(P.fecha) - 1 
+                ELSE YEAR(P.fecha)
+            END
+        AND 
+        E.fechaPeriodoMes = 
+            CASE 
+                -- Si el pago se hace en enero (1), el mes del periodo de expensa es diciembre (12).
+                WHEN MONTH(P.fecha) = 1 THEN 12 
+                ELSE MONTH(P.fecha) - 1 -- Si es otro mes, se aplica al mes anterior.
+            END
+            
+        -- GUARDRAIL: Solo aplica pagos que aún NO hayan sido registrados en PagoAplicado.
+        AND NOT EXISTS (
+            SELECT 1 
+            FROM Pago.PagoAplicado AS PA 
+            WHERE PA.idPago = P.id
+        );
+
+    SET @FilasAfectadas = @@ROWCOUNT;
+    
+    PRINT 'Aplicación de Pagos completada.';
+    PRINT 'Total de nuevos pagos aplicados a DetalleExpensa: ' + CAST(@FilasAfectadas AS VARCHAR);
+
+END
+GO
+-- CAmbiaria nombre a aplicarPagos solamente
+/*CREATE OR ALTER PROCEDURE Operaciones.sp_AplicarPagosACuentas
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -393,7 +533,7 @@ END
 GO
 */
 
-GO
+/*GO*/
 --Rellena tabla CuentaBancaria
 CREATE OR ALTER PROCEDURE Operaciones.SP_generadorCuentaBancaria
 AS
@@ -541,94 +681,190 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_CargaUnidadesFuncionalesSemilla
+--NUEVO---
+CREATE OR ALTER PROCEDURE Operaciones.sp_CargarPersonasSemilla
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    PRINT N'Insertando unidades funcionales aleatorias por consorcio...';
+    PRINT N'Insertando personas semilla en Consorcio.Persona...';
+    -- Listas base de nombres y apellidos
+    DECLARE @Nombres TABLE (nombre NVARCHAR(30));
+    INSERT INTO @Nombres VALUES 
+        ('Juan'),('María'),('Carlos'),('Lucía'),('Sofía'),
+        ('Nicolás'),('Valentina'),('Martín'),('Camila'),('Jorge'),
+        ('Mónica'),('Diego'),('Laura'),('Andrea'),('Pablo');
 
-    DECLARE @consorcioId INT;
-    DECLARE @nombre NVARCHAR(100);
-    DECLARE @contador INT;
+    DECLARE @Apellidos TABLE (apellido NVARCHAR(30));
+    INSERT INTO @Apellidos VALUES 
+        ('Pérez'),('Gómez'),('Rodríguez'),('López'),('Fernández'),
+        ('Martínez'),('Romero'),('Molina'),('Torres'),('Ramos'),
+        ('García'),('Silva'),('Pereyra'),('Vega'),('Castro');
+
+    -- Obtener los ID reales de los tipos de rol existentes
+
+    DECLARE @idInquilino INT = (SELECT TOP 1 idTipoRol FROM Consorcio.TipoRol WHERE nombre = 'Inquilino');
+    DECLARE @idPropietario INT = (SELECT TOP 1 idTipoRol FROM Consorcio.TipoRol WHERE nombre = 'Propietario');
+
+    IF @idInquilino IS NULL OR @idPropietario IS NULL
+    BEGIN
+        PRINT 'Error: No se encontraron los tipos de rol. Ejecutá primero: EXEC Operaciones.CargaTiposRol;';
+        RETURN;
+    END
+
+    -- Generación de 100 personas con datos aleatorios
+    DECLARE @i INT = 1;
+    DECLARE @nombre NVARCHAR(50);
+    DECLARE @apellido NVARCHAR(50);
     DECLARE @cvu CHAR(22);
-    DECLARE @piso VARCHAR(10);
-    DECLARE @depto VARCHAR(10);
-    DECLARE @numero VARCHAR(10);
-    DECLARE @metros DECIMAL(10,2);
-    DECLARE @porcentaje DECIMAL(5,2);
-    DECLARE @tipo VARCHAR(50);
+    DECLARE @rol INT;
+    DECLARE @dni INT;
+    DECLARE @email NVARCHAR(100);
+    DECLARE @telefono NVARCHAR(20);
 
+    WHILE @i <= 100
+    BEGIN
+        SELECT @nombre = (SELECT TOP 1 nombre FROM @Nombres ORDER BY NEWID());
+        SELECT @apellido = (SELECT TOP 1 apellido FROM @Apellidos ORDER BY NEWID());
+        SET @cvu = RIGHT('00000000000000000000' + CAST(ABS(CHECKSUM(NEWID())) AS VARCHAR(22)), 22);
+
+        -- Alternar entre inquilino y propietario
+        SET @rol = CASE WHEN @i % 2 = 0 THEN @idInquilino ELSE @idPropietario END;
+
+        -- Generar un DNI aleatorio (20.000.000 a 45.000.000)
+        SET @dni = 20000000 + ABS(CHECKSUM(NEWID())) % 25000000;
+
+        -- Generar email y teléfono simulados
+        SET @email = LOWER(@nombre + '.' + @apellido + CAST(@i AS NVARCHAR(3)) + '@mailprueba.com');
+        SET @telefono = '11' + RIGHT('00000000' + CAST(ABS(CHECKSUM(NEWID())) % 100000000 AS VARCHAR(8)), 8);
+
+        -- Insertar solo si el CVU no existe
+        IF NOT EXISTS (SELECT 1 FROM Consorcio.Persona WHERE CVU_CBU = @cvu)
+        BEGIN
+            INSERT INTO Consorcio.Persona (dni, nombre, apellido, CVU_CBU, idTipoRol, email, telefono)
+            VALUES (@dni, @nombre, @apellido, @cvu, @rol, @email, @telefono);
+        END
+
+        SET @i += 1;
+    END
+
+    PRINT N'Carga de personas semilla finalizada correctamente (100 personas con email y teléfono).';
+END;
+GO
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_CargaUnidadesFuncionalesSemilla
+AS
+BEGIN
+    SET NOCOUNT ON;
+    PRINT N'Insertando unidades funcionales aleatorias por consorcio...';
+    
     -- Tabla temporal con tipos de unidad
     DECLARE @tipos TABLE (tipo VARCHAR(50));
     INSERT INTO @tipos (tipo)
     VALUES ('Departamento'), ('Dúplex'), ('Local'), ('Oficina'), ('Monoambiente');
-
-    -- Cursor para recorrer todos los consorcios
-    DECLARE consorcios_cursor CURSOR FOR
-        SELECT id, nombre FROM Consorcio.Consorcio;
-
-    OPEN consorcios_cursor;
-    FETCH NEXT FROM consorcios_cursor INTO @consorcioId, @nombre;
-
-    WHILE @@FETCH_STATUS = 0
-    BEGIN
-        PRINT CONCAT('>> Generando unidades funcionales para el consorcio: ', @nombre);
-
-        SET @contador = 1;
-
-        WHILE @contador <= 10
-        BEGIN
-            -- Generar CVU único
-            SET @cvu = RIGHT('00000000000000000000' + CAST(ABS(CHECKSUM(NEWID())) AS VARCHAR(20)), 22);
-
-            -- Crear cuenta bancaria si no existe
-            IF NOT EXISTS (SELECT 1 FROM Consorcio.CuentaBancaria WHERE CVU_CBU = @cvu)
-            BEGIN
-                INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular, saldo)
-                VALUES (@cvu, CONCAT('Titular_', @cvu), 0);
-            END
-
-            -- Generar datos aleatorios de la unidad
-            SET @piso = CAST(CEILING(RAND(CHECKSUM(NEWID())) * 5) AS VARCHAR(10));
-            SET @depto = CHAR(64 + @contador); -- A, B, C...
-            SET @numero = CAST(@contador AS VARCHAR(10));
-            SET @metros = CAST(40 + RAND(CHECKSUM(NEWID())) * 60 AS DECIMAL(10,2));
-            SET @porcentaje = CAST(RAND(CHECKSUM(NEWID())) * 10 AS DECIMAL(5,2));
-
-            -- Elegir tipo aleatorio
-            SELECT TOP 1 @tipo = tipo FROM @tipos ORDER BY NEWID();
-
-            -- Insertar la unidad funcional
-            INSERT INTO Consorcio.UnidadFuncional
-            (
-                CVU_CBU, consorcioId, numero, piso, departamento,
-                metrosCuadrados, porcentajeExpensas, tipo
-            )
-            VALUES
-            (
-                @cvu, 
-                @consorcioId, 
-                @numero, 
-                @piso, 
-                @depto,
-                @metros, 
-                @porcentaje,
-                @tipo
-            );
-
-            SET @contador = @contador + 1;
-        END;
-
-        PRINT CONCAT('   >> Se cargaron 10 unidades para el consorcio ', @nombre, '.');
-
-        FETCH NEXT FROM consorcios_cursor INTO @consorcioId, @nombre;
-    END;
-
-    CLOSE consorcios_cursor;
-    DEALLOCATE consorcios_cursor;
-
-    PRINT N'Carga de unidades funcionales aleatorias finalizada correctamente.';
+    
+    -- PASO 1: Insertar UFs con porcentajes temporales en NULL
+    -- (Los calcularemos después basados en m2 reales)
+    INSERT INTO Consorcio.UnidadFuncional
+    (
+        CVU_CBU, 
+        consorcioId, 
+        numero, 
+        piso, 
+        departamento,
+        metrosCuadrados, 
+        porcentajeExpensas, -- Temporalmente NULL
+        tipo
+    )
+    SELECT 
+        -- CVU aleatorio de la tabla Persona
+        (SELECT TOP 1 CVU_CBU 
+         FROM Consorcio.Persona 
+         ORDER BY NEWID()) AS CVU_CBU,
+        
+        c.id AS consorcioId,
+        
+        -- Número de unidad (1 a 10)
+        CAST(n.numero AS VARCHAR(10)) AS numero,
+        
+        -- Piso aleatorio (1 a 5)
+        CAST(CEILING(RAND(CHECKSUM(NEWID()) + n.numero + c.id) * 5) AS VARCHAR(10)) AS piso,
+        
+        -- Departamento (A, B, C, etc.)
+        CHAR(64 + n.numero) AS departamento,
+        
+        -- Metros cuadrados (40 a 100)
+        CAST(40 + RAND(CHECKSUM(NEWID()) + n.numero * c.id) * 60 AS DECIMAL(10,2)) AS metrosCuadrados,
+        
+        -- Porcentaje se calculará después
+        NULL AS porcentajeExpensas,
+        
+        -- Tipo aleatorio
+        (SELECT TOP 1 tipo FROM @tipos ORDER BY NEWID()) AS tipo
+        
+    FROM 
+        Consorcio.Consorcio c
+    CROSS JOIN
+        -- Generar números del 1 al 10
+        (VALUES (1),(2),(3),(4),(5),(6),(7),(8),(9),(10)) AS n(numero)
+    WHERE NOT EXISTS (
+        -- Evitar duplicados si se ejecuta múltiples veces
+        SELECT 1 
+        FROM Consorcio.UnidadFuncional uf 
+        WHERE uf.consorcioId = c.id 
+          AND uf.numero = CAST(n.numero AS VARCHAR(10))
+    );
+    
+    DECLARE @totalInsertadas INT = @@ROWCOUNT;
+    
+    -- PASO 2: Calcular porcentajes normalizados basados en m2
+    PRINT N'Calculando porcentajes proporcionales a los metros cuadrados...';
+    
+    UPDATE UF
+    SET porcentajeExpensas = CAST(
+        (UF.metrosCuadrados * 100.0) / TotalM2.TotalMetros 
+        AS DECIMAL(5,2)
+    )
+    FROM Consorcio.UnidadFuncional AS UF
+    INNER JOIN (
+        SELECT 
+            consorcioId,
+            SUM(metrosCuadrados) AS TotalMetros
+        FROM Consorcio.UnidadFuncional
+        WHERE metrosCuadrados IS NOT NULL
+        GROUP BY consorcioId
+    ) AS TotalM2 ON UF.consorcioId = TotalM2.consorcioId
+    WHERE UF.metrosCuadrados IS NOT NULL
+      AND UF.porcentajeExpensas IS NULL; -- Solo las recién insertadas
+    
+    -- PASO 3: Ajustar redondeo para que sume EXACTAMENTE 100%
+    -- (La última UF de cada consorcio absorbe la diferencia de redondeo)
+    ;WITH UFOrdenada AS (
+        SELECT 
+            id,
+            consorcioId,
+            porcentajeExpensas,
+            ROW_NUMBER() OVER (PARTITION BY consorcioId ORDER BY id DESC) AS rn
+        FROM Consorcio.UnidadFuncional
+    ),
+    SumaActual AS (
+        SELECT 
+            consorcioId,
+            SUM(porcentajeExpensas) AS SumaTotal
+        FROM Consorcio.UnidadFuncional
+        GROUP BY consorcioId
+    )
+    UPDATE UF
+    SET porcentajeExpensas = UF.porcentajeExpensas + (100 - SA.SumaTotal)
+    FROM Consorcio.UnidadFuncional AS UF
+    INNER JOIN UFOrdenada AS UO ON UF.id = UO.id
+    INNER JOIN SumaActual AS SA ON UF.consorcioId = SA.consorcioId
+    WHERE UO.rn = 1 -- Solo la última UF de cada consorcio
+      AND ABS(SA.SumaTotal - 100) > 0.01; -- Solo si hay diferencia
+    
+    -- Mensaje final
+    PRINT 'Se cargaron unidades funcionales correctamente.';
+    
 END;
 GO
 -- =============================================
@@ -647,7 +883,7 @@ GO
 	con algo mas normal y que sepamos
 */
 
-/*CREATE OR ALTER PROCEDURE Negocio.SP_GenerarExpensasMensuales
+CREATE OR ALTER PROCEDURE Negocio.SP_GenerarExpensasMensuales
     @ConsorcioID INT,
     @Anio INT,
     @Mes INT
@@ -792,4 +1028,168 @@ BEGIN
     END CATCH
 END
 GO
-*/
+CREATE OR ALTER PROCEDURE Operaciones.sp_GenerarGastosOrdinarios
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    PRINT N'Generando Gastos Ordinarios...';
+
+    -- Tablas de datos semilla
+    DECLARE @TiposServicio TABLE (tipo VARCHAR(50));
+    INSERT INTO @TiposServicio VALUES 
+        ('ADMINISTRACION'),
+        ('BANCARIOS'),
+        ('LIMPIEZA'),
+        ('SEGUROS'),
+        ('GASTOS GENERALES'),
+        ('SERVICIOS PUBLICOS-Agua'),
+        ('SERVICIOS PUBLICOS-Luz');
+
+    DECLARE @Proveedores TABLE (nombre VARCHAR(200), tipoServicio VARCHAR(50));
+    INSERT INTO @Proveedores VALUES
+        ('Administración Central SRL', 'ADMINISTRACION'),
+        ('Banco Galicia', 'BANCARIOS'),
+        ('Banco Nación', 'BANCARIOS'),
+        ('Limpieza Express SA', 'LIMPIEZA'),
+        ('Clean Pro Servicios', 'LIMPIEZA'),
+        ('Seguros Rivadavia', 'SEGUROS'),
+        ('La Meridional Seguros', 'SEGUROS'),
+        ('Ferretería El Progreso', 'GASTOS GENERALES'),
+        ('Materiales San Martín', 'GASTOS GENERALES'),
+        ('AYSA', 'SERVICIOS PUBLICOS-Agua'),
+        ('EDENOR', 'SERVICIOS PUBLICOS-Luz');
+
+    -- Variables
+    DECLARE @ConsorcioID INT;
+    DECLARE @Mes INT;
+    DECLARE @Anio INT = 2024;
+    DECLARE @TipoServicio VARCHAR(50);
+    DECLARE @Proveedor VARCHAR(200);
+    DECLARE @Importe DECIMAL(18,2);
+    DECLARE @NroFactura CHAR(10);
+    DECLARE @FechaEmision DATE;
+    DECLARE @Detalle VARCHAR(500);
+
+    -- Cursor por cada consorcio
+    DECLARE ConsorciosCursor CURSOR FOR
+        SELECT id FROM Consorcio.Consorcio;
+
+    OPEN ConsorciosCursor;
+    FETCH NEXT FROM ConsorciosCursor INTO @ConsorcioID;
+
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        -- Para cada mes (Enero a Octubre)
+        SET @Mes = 1;
+        WHILE @Mes <= 10
+        BEGIN
+            -- Generar 1 gasto por cada tipo de servicio
+            DECLARE TiposCursor CURSOR FOR
+                SELECT tipo FROM @TiposServicio;
+            
+            OPEN TiposCursor;
+            FETCH NEXT FROM TiposCursor INTO @TipoServicio;
+            
+            WHILE @@FETCH_STATUS = 0
+            BEGIN
+                -- Seleccionar proveedor aleatorio para ese tipo
+                SELECT TOP 1 @Proveedor = nombre
+                FROM @Proveedores
+                WHERE tipoServicio = @TipoServicio
+                ORDER BY NEWID();
+
+                -- Generar importe aleatorio según tipo
+                SET @Importe = CASE @TipoServicio
+                    WHEN 'ADMINISTRACION' THEN 15000 + (RAND(CHECKSUM(NEWID())) * 10000)
+                    WHEN 'BANCARIOS' THEN 2000 + (RAND(CHECKSUM(NEWID())) * 3000)
+                    WHEN 'LIMPIEZA' THEN 20000 + (RAND(CHECKSUM(NEWID())) * 15000)
+                    WHEN 'SEGUROS' THEN 8000 + (RAND(CHECKSUM(NEWID())) * 7000)
+                    WHEN 'GASTOS GENERALES' THEN 5000 + (RAND(CHECKSUM(NEWID())) * 10000)
+                    WHEN 'SERVICIOS PUBLICOS-Agua' THEN 12000 + (RAND(CHECKSUM(NEWID())) * 8000)
+                    WHEN 'SERVICIOS PUBLICOS-Luz' THEN 18000 + (RAND(CHECKSUM(NEWID())) * 12000)
+                    ELSE 5000
+                END;
+
+                -- Generar número de factura único (10 dígitos)
+                SET @NroFactura = RIGHT('0000000000' + 
+                    CAST(ABS(CHECKSUM(NEWID())) % 9999999999 AS VARCHAR(10)), 10);
+                
+                -- Verificar unicidad del nroFactura
+                WHILE EXISTS (SELECT 1 FROM Negocio.GastoOrdinario WHERE nroFactura = @NroFactura)
+                BEGIN
+                    SET @NroFactura = RIGHT('0000000000' + 
+                        CAST(ABS(CHECKSUM(NEWID())) % 9999999999 AS VARCHAR(10)), 10);
+                END
+
+                -- Fecha de emisión: entre el día 1 y 15 del mes
+                SET @FechaEmision = DATEADD(DAY, 
+                    ABS(CHECKSUM(NEWID())) % 15, 
+                    DATEFROMPARTS(@Anio, @Mes, 1));
+
+                -- Detalle genérico
+                SET @Detalle = 'Servicio de ' + @TipoServicio + ' - Mes ' + 
+                    CAST(@Mes AS VARCHAR(2)) + '/' + CAST(@Anio AS VARCHAR(4));
+
+                -- Insertar el gasto
+                INSERT INTO Negocio.GastoOrdinario 
+                    (idExpensa, consorcioId, nombreEmpresaoPersona, nroFactura, 
+                     fechaEmision, importeTotal, detalle, tipoServicio)
+                VALUES 
+                    (NULL, @ConsorcioID, @Proveedor, @NroFactura,
+                     @FechaEmision, @Importe, @Detalle, @TipoServicio);
+
+                FETCH NEXT FROM TiposCursor INTO @TipoServicio;
+            END
+            
+            CLOSE TiposCursor;
+            DEALLOCATE TiposCursor;
+            
+            SET @Mes = @Mes + 1;
+        END
+        
+        FETCH NEXT FROM ConsorciosCursor INTO @ConsorcioID;
+    END
+
+    CLOSE ConsorciosCursor;
+    DEALLOCATE ConsorciosCursor;
+
+    DECLARE @TotalGenerados INT = @@ROWCOUNT;
+    PRINT CONCAT('✓ ', @TotalGenerados, ' Gastos Ordinarios generados');
+    PRINT '  (7 tipos × 10 meses × 5 consorcios = 350 gastos)';
+END
+GO
+
+-- SP: Generar Pagos Simulados
+CREATE OR ALTER PROCEDURE Operaciones.sp_GenerarPagosSimulados
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    PRINT N'Generando Pagos Simulados...';
+
+    INSERT INTO Pago.Pago (fecha, importe, cbuCuentaOrigen, idFormaPago)
+    SELECT 
+        DATEADD(DAY, 
+                5 + (ABS(CHECKSUM(NEWID())) % 6),
+                DATEFROMPARTS(
+                    CASE WHEN E.fechaPeriodoMes = 12 THEN E.fechaPeriodoAnio + 1 ELSE E.fechaPeriodoAnio END,
+                    CASE WHEN E.fechaPeriodoMes = 12 THEN 1 ELSE E.fechaPeriodoMes + 1 END,
+                    1
+                )
+        ) AS fecha,
+        CAST(
+            DE.totalaPagar * (0.70 + (ABS(CHECKSUM(NEWID())) % 31) / 100.0)
+            AS DECIMAL(18,2)
+        ) AS importe,
+        UF.CVU_CBU AS cbuCuentaOrigen,
+        1 + (ABS(CHECKSUM(NEWID())) % 3) AS idFormaPago
+    FROM Negocio.DetalleExpensa DE
+    INNER JOIN Consorcio.UnidadFuncional UF ON DE.idUnidadFuncional = UF.id
+    INNER JOIN Negocio.Expensa E ON DE.expensaId = E.id
+    WHERE 
+        (ABS(CHECKSUM(NEWID())) % 100) < 80;
+
+    PRINT ' Pagos simulados generados';
+END
+GO
