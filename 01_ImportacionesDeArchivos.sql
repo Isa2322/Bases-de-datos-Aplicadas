@@ -31,7 +31,7 @@ BEGIN
 
     IF @DefaultFormaPagoID IS NULL
     BEGIN
-        -- Error claro si no hay formas de pago predefinidas (Soluciona el Mensaje 515)
+        -- Error si no hay formas de pago predefinidas
         RAISERROR('Error 515: La tabla Pago.FormaDePago está vacía. Por favor, inserte al menos una forma de pago antes de importar.', 16, 1);
         RETURN;
     END
@@ -132,7 +132,7 @@ END
 GO
 
 IF OBJECT_ID('sp_ImportacionPago', 'P') IS NOT NULL
-PRINT 'Stored Procedure: Operaciones.sp_ImportacionPago creado exitosamente'
+PRINT 'Stored Procedure: Operaciones.sp_ImportacionPago creado exitosamente, las modificaciones seran insertadas en la tabla "Pago.Pago"'
 GO
 
 -- Función para determinar el N-ésimo día hábil de un mes _________________________________________________  
@@ -324,7 +324,7 @@ BEGIN
 GO
 
 IF OBJECT_ID('Operaciones.sp_ImportarGastosMensuales', 'P') IS NOT NULL
-PRINT 'Stored Procedure: Operaciones.sp_ImportarGastosMensuales creado exitosamente'
+PRINT 'Stored Procedure: Operaciones.sp_ImportarGastosMensuales creado exitosamente, las modificaciones seran insertadas en la tabla "Negocio.GastoOrdinario"'
 GO
 
 --==================================================================================================================
@@ -432,7 +432,7 @@ END;
 GO
 
 IF OBJECT_ID('Operaciones.sp_ImportarInquilinosPropietarios', 'P') IS NOT NULL
-PRINT 'Stored Procedure: Operaciones.sp_ImportarInquilinosPropietarios creado exitosamente'
+PRINT 'Stored Procedure: Operaciones.sp_ImportarInquilinosPropietarios creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.Persona"'
 GO
 
 --==================================================================================================================
@@ -516,7 +516,7 @@ END
 GO
 
 IF OBJECT_ID('Operaciones.sp_ImportarDatosConsorcios', 'P') IS NOT NULL
-PRINT 'Stored Procedure: Operaciones.sp_ImportarDatosConsorcios creado exitosamente'
+PRINT 'Stored Procedure: Operaciones.sp_ImportarDatosConsorcios creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.Consorcio"'
 GO
 
 --==================================================================================================================
@@ -654,7 +654,7 @@ END;
 GO
 
 IF OBJECT_ID('Operaciones.sp_ImportarDatosProveedores', 'P') IS NOT NULL
-PRINT 'Stored Procedure: Operaciones.sp_ImportarDatosProveedores creado exitosamente'
+PRINT 'Stored Procedure: Operaciones.sp_ImportarDatosProveedores creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.Proveedores"'
 GO
 
 --===============================================================================================================
@@ -755,7 +755,7 @@ END
 GO
 
 IF OBJECT_ID('Operaciones.sp_CargarUF_Inquilinos', 'P') IS NOT NULL
-PRINT 'Stored Procedure: Operaciones.sp_CargarUF_Inquilinos creado exitosamente'
+PRINT 'Stored Procedure: Operaciones.sp_CargarUF_Inquilinos creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.UnidadFuncional"'
 GO
 
 --===============================================================================================================
@@ -895,7 +895,7 @@ END
 GO
 
 IF OBJECT_ID('Operaciones.sp_ImportarUFporConsorcio', 'P') IS NOT NULL
-PRINT 'Stored Procedure: Operaciones.sp_ImportarUFporConsorcio creado exitosamente'
+PRINT 'Stored Procedure: Operaciones.sp_ImportarUFporConsorcio creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.UnidadFuncional"'
 GO
 
 
