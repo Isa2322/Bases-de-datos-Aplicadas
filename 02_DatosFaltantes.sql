@@ -9,7 +9,8 @@ Quispe, Milagros Soledad - 45064110
 Puma, Florencia - 42945609
 Fontanet Caniza, Camila - 44892126
 Altamiranda, Isaias Taiel - 43094671
-Pastori, Ximena - 42300128*/
+Pastori, Ximena - 42300128
+*/
 
 USE [Com5600G11]; 
 GO
@@ -41,15 +42,15 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID('Operaciones.CargaTiposRol', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarUFporConsorcio creado exitosamente'
+GO
+
 -- ======================================================================================================
 -- Rellenar tabla FORMAS DE PAGO
 -- ======================================================================================================
 
-IF OBJECT_ID('Operaciones.SP_CrearYcargar_FormasDePago_Semilla', 'P') IS NOT NULL
-    DROP PROCEDURE Operaciones.SP_CrearYcargar_FormasDePago_Semilla
-GO
-
-CREATE PROCEDURE Operaciones.SP_CrearYcargar_FormasDePago_Semilla
+CREATE OR ALTER PROCEDURE Operaciones.SP_CrearYcargar_FormasDePago
 AS
 BEGIN
     
@@ -79,6 +80,10 @@ BEGIN
     PRINT N'Carga de datos de Formas de Pago finalizada.';
 
 END
+GO
+
+IF OBJECT_ID('Operaciones.SP_CrearYcargar_FormasDePago', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.SP_CrearYcargar_FormasDePago creado exitosamente'
 GO
 
 -- ======================================================================================================
@@ -141,6 +146,11 @@ BEGIN
     PRINT '>> Cocheras generadas exitosamente.';
 END;
 GO
+
+IF OBJECT_ID('Operaciones.sp_RellenarCocheras', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_RellenarCocheras creado exitosamente'
+GO
+
 -- ======================================================================================================
 -- Rellenar tabla BAULERA
 -- ======================================================================================================
@@ -198,6 +208,10 @@ BEGIN
 
     PRINT '>> Bauleras generadas exitosamente.';
 END;
+GO
+
+IF OBJECT_ID('Operaciones.sp_RellenarBauleras', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_RellenarBauleras creado exitosamente'
 GO
 
 -- ======================================================================================================
@@ -267,11 +281,15 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID('Operaciones.sp_AplicarPagosACuentas', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_AplicarPagosACuentas creado exitosamente'
+GO
+
 -- ======================================================================================================
 -- Rellenar GASTOS EXTRAORDINARIOS
 -- ======================================================================================================
 
-CREATE OR ALTER PROCEDURE Negocio.sp_CargarGastosExtraordinarios
+CREATE OR ALTER PROCEDURE Operaciones.sp_CargarGastosExtraordinarios
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -344,6 +362,9 @@ BEGIN
 END;
 GO
 
+IF OBJECT_ID('Operaciones.sp_CargarGastosExtraordinarios', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_CargarGastosExtraordinarios creado exitosamente'
+GO
 
 -- =============================================
 -- ====cambio en la tabla de aplicar pagos======
@@ -362,7 +383,6 @@ GO
     tienen datos con un select * from Negocio.DetalleExpensa
 
 */
-
 
 -- ======================================================================================================
 -- Rellenar PAGO APLICADO
@@ -429,92 +449,10 @@ BEGIN
 
 END
 GO
--- CAmbiaria nombre a aplicarPagos solamente
-/*CREATE OR ALTER PROCEDURE Operaciones.sp_AplicarPagosACuentas
-AS
-BEGIN
-    SET NOCOUNT ON;
 
-    DECLARE @FilasAfectadas INT = 0;
-
-    --  veo los pagos a aplicar y los guardao en tabla temporal
-    SELECT
-        P.id AS idPago,
-        P.importe AS importeAplicado,
-        DE.id AS idDetalleExpensa
-    INTO #PagosAAplicar
-    FROM Pago.Pago AS P
-
-        -- Encontrar la Unidad Funcional (UF) dueña del CVU/CBU de origen del pago
-        INNER JOIN Consorcio.UnidadFuncional AS UF
-        ON P.cbuCuentaOrigen = UF.CVU_CBU
-
-        -- Encontrar el Detalle de Expensa (DE) correspondiente a esa UF
-        INNER JOIN Negocio.DetalleExpensa AS DE
-        ON DE.idUnidadFuncional = UF.id
-
-        -- Encontrar la Expensa (E) para verificar el período
-        INNER JOIN Negocio.Expensa AS E
-        ON DE.expensaId = E.id
-
-    WHERE 
-        -- LÓGICA DE APLICACIÓN DEL PERÍODO (Mes de Pago = Mes de Vencimiento de Expensa)
-        -- Si el pago se hace en el mes M, se aplica a la expensa generada para el periodo M-1.
-        E.fechaPeriodoAnio = 
-            CASE 
-                -- Si el pago se hace en enero, se aplica a la expensa de diciembre del año anterior.
-                WHEN MONTH(P.fecha) = 1 THEN YEAR(P.fecha) - 1 
-                ELSE YEAR(P.fecha)
-            END
-        AND
-        E.fechaPeriodoMes = 
-            CASE 
-                -- Si el pago se hace en enero (1), el mes del periodo de expensa es diciembre (12).
-                WHEN MONTH(P.fecha) = 1 THEN 12 
-                ELSE MONTH(P.fecha) - 1 -- Si es otro mes, se aplica al mes anterior.
-            END
-
-        -- GUARDRAIL: Solo aplica pagos que aún NO hayan sido registrados en PagoAplicado.
-        AND NOT EXISTS (
-            SELECT 1
-            FROM Pago.PagoAplicado AS PA
-            WHERE PA.idPago = P.id
-        );
-
-    -- Insertar en Pago.PagoAplicado desde la tabla temporal
-    INSERT INTO Pago.PagoAplicado (idPago, idDetalleExpensa, importeAplicado)
-    SELECT
-        idPago,
-        idDetalleExpensa,
-        importeAplicado
-    FROM #PagosAAplicar;
-
-
-    -- Actualizar pagosRecibidos en DetalleExpensa
-    -- Agrupamos por si una UF hizo un par de pagos que aplican al mismo DetalleExpensa
-    WITH SumaPagosPorDetalle AS
-    (
-        SELECT
-            idDetalleExpensa,
-            SUM(importeAplicado) AS MontoTotalPagado
-        FROM #PagosAAplicar
-        GROUP BY idDetalleExpensa
-    )
-    UPDATE DE
-    SET DE.pagosRecibidos = ISNULL(DE.pagosRecibidos, 0) + SP.MontoTotalPagado
-    FROM Negocio.DetalleExpensa AS DE
-    INNER JOIN SumaPagosPorDetalle AS SP ON DE.id = SP.idDetalleExpensa;
-
-    SET @FilasAfectadas = @@ROWCOUNT;
-
-    -- Limpiar tabla temporal
-    DROP TABLE IF EXISTS #PagosAAplicar;
-
-END
+IF OBJECT_ID('Operaciones.sp_AplicarPagosACuentas', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_AplicarPagosACuentas creado exitosamente'
 GO
-*/
-
-/*GO*/
 
 -- ======================================================================================================
 -- Rellenar tabla CUENTA BANCARIA
@@ -588,27 +526,15 @@ END
 END
 GO
 
--- =============================================
--- Generador de expensas
-/*
-    Lo pude probar con muy pocos datos y andaba, hay que volver
-    a testear con todas las demas tablas cargadas.
-
-    Deberia funcioar bien. para cuaquier Enero, para otros meses me tiro error
-    porque no tenia datos de mesews anteriores.
-
-    Si alguien lo prueba y funciona bien, que vea si todos los campos de expensa
-    tienen datos con un select * from Negocio.Expensa
-
-	Ver si se puede reemplazar la linea SET @NuevaExpensaID = SCOPE_IDENTITY();
-	con algo mas normal y que sepamos
-*/
+IF OBJECT_ID('Operaciones.SP_generadorCuentaBancaria', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.SP_generadorCuentaBancaria creado exitosamente'
+GO
 
 -- ======================================================================================================
 -- Rellenar tabla DETALLE EXPENSA
 -- ======================================================================================================
 
-CREATE OR ALTER PROCEDURE Negocio.SP_GenerarExpensasMensuales
+CREATE OR ALTER PROCEDURE Operaciones.SP_GenerarExpensasMensuales
     @ConsorcioID INT,
     @Anio INT,
     @Mes INT
@@ -753,6 +679,116 @@ BEGIN
     END CATCH
 END
 GO
+
+IF OBJECT_ID('Operaciones.SP_GenerarExpensasMensuales', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.SP_GenerarExpensasMensuales creado exitosamente'
+GO
+
+
+
+-- CAmbiaria nombre a aplicarPagos solamente
+/*CREATE OR ALTER PROCEDURE Operaciones.sp_AplicarPagosACuentas
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @FilasAfectadas INT = 0;
+
+    --  veo los pagos a aplicar y los guardao en tabla temporal
+    SELECT
+        P.id AS idPago,
+        P.importe AS importeAplicado,
+        DE.id AS idDetalleExpensa
+    INTO #PagosAAplicar
+    FROM Pago.Pago AS P
+
+        -- Encontrar la Unidad Funcional (UF) dueña del CVU/CBU de origen del pago
+        INNER JOIN Consorcio.UnidadFuncional AS UF
+        ON P.cbuCuentaOrigen = UF.CVU_CBU
+
+        -- Encontrar el Detalle de Expensa (DE) correspondiente a esa UF
+        INNER JOIN Negocio.DetalleExpensa AS DE
+        ON DE.idUnidadFuncional = UF.id
+
+        -- Encontrar la Expensa (E) para verificar el período
+        INNER JOIN Negocio.Expensa AS E
+        ON DE.expensaId = E.id
+
+    WHERE 
+        -- LÓGICA DE APLICACIÓN DEL PERÍODO (Mes de Pago = Mes de Vencimiento de Expensa)
+        -- Si el pago se hace en el mes M, se aplica a la expensa generada para el periodo M-1.
+        E.fechaPeriodoAnio = 
+            CASE 
+                -- Si el pago se hace en enero, se aplica a la expensa de diciembre del año anterior.
+                WHEN MONTH(P.fecha) = 1 THEN YEAR(P.fecha) - 1 
+                ELSE YEAR(P.fecha)
+            END
+        AND
+        E.fechaPeriodoMes = 
+            CASE 
+                -- Si el pago se hace en enero (1), el mes del periodo de expensa es diciembre (12).
+                WHEN MONTH(P.fecha) = 1 THEN 12 
+                ELSE MONTH(P.fecha) - 1 -- Si es otro mes, se aplica al mes anterior.
+            END
+
+        -- GUARDRAIL: Solo aplica pagos que aún NO hayan sido registrados en PagoAplicado.
+        AND NOT EXISTS (
+            SELECT 1
+            FROM Pago.PagoAplicado AS PA
+            WHERE PA.idPago = P.id
+        );
+
+    -- Insertar en Pago.PagoAplicado desde la tabla temporal
+    INSERT INTO Pago.PagoAplicado (idPago, idDetalleExpensa, importeAplicado)
+    SELECT
+        idPago,
+        idDetalleExpensa,
+        importeAplicado
+    FROM #PagosAAplicar;
+
+
+    -- Actualizar pagosRecibidos en DetalleExpensa
+    -- Agrupamos por si una UF hizo un par de pagos que aplican al mismo DetalleExpensa
+    WITH SumaPagosPorDetalle AS
+    (
+        SELECT
+            idDetalleExpensa,
+            SUM(importeAplicado) AS MontoTotalPagado
+        FROM #PagosAAplicar
+        GROUP BY idDetalleExpensa
+    )
+    UPDATE DE
+    SET DE.pagosRecibidos = ISNULL(DE.pagosRecibidos, 0) + SP.MontoTotalPagado
+    FROM Negocio.DetalleExpensa AS DE
+    INNER JOIN SumaPagosPorDetalle AS SP ON DE.id = SP.idDetalleExpensa;
+
+    SET @FilasAfectadas = @@ROWCOUNT;
+
+    -- Limpiar tabla temporal
+    DROP TABLE IF EXISTS #PagosAAplicar;
+
+END
+GO
+*/
+
+/*GO*/
+
+-- =============================================
+-- Generador de expensas
+/*
+    Lo pude probar con muy pocos datos y andaba, hay que volver
+    a testear con todas las demas tablas cargadas.
+
+    Deberia funcioar bien. para cuaquier Enero, para otros meses me tiro error
+    porque no tenia datos de mesews anteriores.
+
+    Si alguien lo prueba y funciona bien, que vea si todos los campos de expensa
+    tienen datos con un select * from Negocio.Expensa
+
+	Ver si se puede reemplazar la linea SET @NuevaExpensaID = SCOPE_IDENTITY();
+	con algo mas normal y que sepamos
+*/
+
 
 
 /*
