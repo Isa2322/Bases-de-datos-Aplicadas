@@ -59,15 +59,15 @@ IF EXISTS (SELECT *
 IF EXISTS (SELECT *
     FROM sys.database_principals
     WHERE name = 'Sistemas')
-    DROP ROLE Sistemas;
-GO
+    DROP ROLE Sistemas
+
 
 -- Creación de roles
 CREATE ROLE AdministrativoGeneral;
 CREATE ROLE AdministrativoBancario;
 CREATE ROLE AdministrativoOperativo;
 CREATE ROLE Sistemas;
-GO
+
 
 PRINT '--- Asignando permisos por área ---';
 
@@ -98,7 +98,7 @@ GRANT EXECUTE ON SCHEMA::Operaciones TO
     Sistemas;
 GRANT VIEW DEFINITION TO 
     Sistemas;
-GO
+
 
 PRINT '--- Roles y permisos asignados correctamente ---';
 
@@ -115,6 +115,11 @@ PRINT '--- Roles y permisos asignados correctamente ---';
 
 PRINT '--- Creando llaves de cifrado ---';
 
+/*
+ Usamos MASTER KEY + CERTIFICATE + SYMMETRIC KEY (AES_256).
+ La contraseña de MASTER KEY está hardcodeada para el TP, en prod seria un secreto seguro.
+*/
+
 -- Crear MASTER KEY (solo una vez)
 IF NOT EXISTS 
     (SELECT *
@@ -123,7 +128,7 @@ IF NOT EXISTS
 BEGIN
     CREATE MASTER KEY ENCRYPTION BY PASSWORD = 'ClaveFuerte@2024';
 END
-GO
+
 
 -- Crear CERTIFICADO
 IF NOT EXISTS 
@@ -134,7 +139,7 @@ BEGIN
     CREATE CERTIFICATE CertificadoSeguridad
     WITH SUBJECT = 'Cifrado de datos personales en Consorcio.Persona';
 END
-GO
+
 
 -- Crear LLAVE SIMÉTRICA con AES_256
 IF NOT EXISTS
@@ -146,7 +151,7 @@ BEGIN
     WITH ALGORITHM = AES_256
     ENCRYPTION BY CERTIFICATE CertificadoSeguridad;
 END
-GO
+
 
 PRINT '--- Aplicando cifrado sobre tabla Persona ---';
 
@@ -160,33 +165,32 @@ IF COL_LENGTH('Consorcio.Persona', 'Email_Encriptado') IS NULL
 IF COL_LENGTH('Consorcio.Persona', 'CVU_Encriptado') IS NULL
     ALTER TABLE Consorcio.Persona
     ADD CVU_Encriptado VARBINARY(MAX);
-GO
+
 
 -- Ciframos los datos
 OPEN SYMMETRIC KEY LlaveCifrado DECRYPTION BY CERTIFICATE CertificadoSeguridad;
 
 UPDATE Consorcio.Persona
-SET DNI_Encriptado   = EncryptByKey(Key_GUID('LlaveCifrado'), CAST(DNI AS NVARCHAR(20))),
-    Email_Encriptado = EncryptByKey(Key_GUID('LlaveCifrado'), CAST(Email AS NVARCHAR(200))),
+SET 
     CVU_Encriptado   = EncryptByKey(Key_GUID('LlaveCifrado'), CAST(CVU_CBUPersona AS NVARCHAR(30)));
 
 CLOSE SYMMETRIC KEY LlaveCifrado;
-GO
+
 
 PRINT '--- Datos personales cifrados correctamente ---';
 
+END;
 -- Creamos una vista que "desencripta" los campos para lectura controlada.
 
 -- IMPORTANTE: asegurar que solo los roles adecuados tengan SELECT sobre esta vista.
-
-IF OBJECT_ID('Consorcio.vw_PersonasLegibles') IS NOT NULL
-    DROP VIEW Consorcio.vw_PersonasLegibles;
 GO
 
-CREATE VIEW Consorcio.vw_PersonasLegibles
+
+
+CREATE OR ALTER VIEW Consorcio.vw_PersonasLegibles
 AS
 SELECT 
-    p.id,
+    p.idPersona,           -- usa el nombre real de tu PK
     p.nombre,
     CONVERT(VARCHAR, DecryptByKeyAutoCert(CERT_ID('CertificadoSeguridad'), NULL, DNI_Encriptado)) AS DNI,
     CONVERT(VARCHAR, DecryptByKeyAutoCert(CERT_ID('CertificadoSeguridad'), NULL, Email_Encriptado)) AS Email,
@@ -236,22 +240,24 @@ PRINT '--- Backups configurados correctamente ---';
 /*
     DOCUMENTACIÓN DE POLÍTICA DE RESPALDO:
 
-- Backup completo: cada domingo 00:00 hs
-- Backup diferencial: todos los días 02:00 hs
-- Backup de logs: cada 4 horas
-- RPO (Recovery Point Objective): 4 horas
-- RTO (Recovery Time Objective): 2 horas
-- Responsable: Rol “Sistemas”
-- Almacenamiento secundario: NAS corporativo + copia en nube semanal
-- Verificación automática: SQL Server Agent Job con verificación HASHCHECK
+- Backup completo: cada domingo 00:00 hs (archivo semanal).
+- Backup diferencial: todos los días 02:00 hs (archivo diferencial diario).
+- Backup de logs: cada 4 horas (archivos .trn para poder recuperar punto en tiempo).
+- RPO (Recovery Point Objective): 4 horas (pérdida máxima aceptable).
+- RTO (Recovery Time Objective): 2 horas (tiempo objetivo para recuperar el servicio).
+- Responsable operativo: rol “Sistemas”.
+- Almacenamiento secundario: copia a NAS corporativo + copia semanal a la nube (ej. blob storage).
+- Verificación automática: crear job que valide integridad del backup
+    (RESTORE VERIFYONLY o checksums).
+- Observación: cambiar rutas D:\Backups y permisos de acceso en el
+    servidor antes de usar en producción.
 
-Los respaldos se almacenan en D:\Backups\ y se replican a \\NAS\AdminDB\RespaldoMensual
 */
 
 PRINT '--- Fin de script de seguridad y cifrado ---';
 
 
-END;
+END
 GO
 
 -- EJEMPLO DE INVOCACIÓN:

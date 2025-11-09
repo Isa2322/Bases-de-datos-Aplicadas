@@ -345,32 +345,6 @@ END;
 GO
 
 
-/*
-INSERT INTO Negocio.GastoExtraordinario
-    (detalle, importeTotal, fechaEmision, nombreEmpresaoPersona, esPagoTotal, nroCuota, totalCuota)
-VALUES
--- 🔹 AZCUENAGA (id 1)
-('Reparación estructural del techo', 420000.00, '2024-04-12', 'ConstruRed SRL', 1, NULL, 0),
-('Reacondicionamiento de tanque de agua', 165000.00, '2024-05-18', 'AquaService', 0, 1, 55000.00),
-
--- 🔹 ALZAGA (id 2)
-('Colocación de portón automático',  380000.00, '2024-04-28', 'TecnoPortones', 1, NULL, 0),
-('Refacción del sistema pluvial', 210000.00, '2024-06-10', 'ObrasPluviales SRL', 1, NULL, 0),
-
--- 🔹 ALBERDI (id 3)
-('Pintura integral del edificio',  295000.00, '2024-04-25', 'ColorSur Pinturas', 1, NULL, 0),
-('Ampliación del salón de usos múltiples',  520000.00, '2024-06-05', 'ObraFina S.A.', 1, 2, 4),
-
--- 🔹 UNZUE (id 4)
-('Reemplazo de tablero eléctrico principal', 360000.00, '2024-04-30', 'ElectroRed S.A.', 1, NULL, 0),
-('Reparación de filtraciones en cocheras',  240000.00, '2024-05-22', 'Impermeables S.A.', 0, 1, 40000.00),
-
--- 🔹 PEREYRA IRAOLA (id 5)
-('Colocación de cámaras de seguridad IP',  310000.00, '2024-04-14', 'SafeCam Systems', 1, NULL, 0),
-('Cambio de cañerías de gas en planta baja',  415000.00, '2024-06-10', 'GasSur SRL', 1, 2, 46111.11);
-GO*/
-
-
 -- =============================================
 -- ====cambio en la tabla de aplicar pagos======
 -- =============================================
