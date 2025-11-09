@@ -614,43 +614,6 @@ END
 END
 GO
 
--- ======================================================================================================
--- Rellenar tabla PAGO ?
--- ======================================================================================================
-
-CREATE OR ALTER PROCEDURE Operaciones.sp_GenerarPagosSimulados
-AS
-BEGIN
-    SET NOCOUNT ON;
-    
-    PRINT N'Generando Pagos Simulados...';
-
-    INSERT INTO Pago.Pago (fecha, importe, cbuCuentaOrigen, idFormaPago)
-    SELECT 
-        DATEADD(DAY, 
-                5 + (ABS(CHECKSUM(NEWID())) % 6),
-                DATEFROMPARTS(
-                    CASE WHEN E.fechaPeriodoMes = 12 THEN E.fechaPeriodoAnio + 1 ELSE E.fechaPeriodoAnio END,
-                    CASE WHEN E.fechaPeriodoMes = 12 THEN 1 ELSE E.fechaPeriodoMes + 1 END,
-                    1
-                )
-        ) AS fecha,
-        CAST(
-            DE.totalaPagar * (0.70 + (ABS(CHECKSUM(NEWID())) % 31) / 100.0)
-            AS DECIMAL(18,2)
-        ) AS importe,
-        UF.CVU_CBU AS cbuCuentaOrigen,
-        1 + (ABS(CHECKSUM(NEWID())) % 3) AS idFormaPago
-    FROM Negocio.DetalleExpensa DE
-    INNER JOIN Consorcio.UnidadFuncional UF ON DE.idUnidadFuncional = UF.id
-    INNER JOIN Negocio.Expensa E ON DE.expensaId = E.id
-    WHERE 
-        (ABS(CHECKSUM(NEWID())) % 100) < 80;
-
-    PRINT ' Pagos simulados generados';
-END
-GO
-
 -- =============================================
 -- Generador de expensas
 /*
@@ -822,6 +785,45 @@ GO
 
 
 -- ESTO NO VA !!!!!!!!!!!!!!!
+
+
+-- ======================================================================================================
+-- Rellenar tabla PAGO ?
+-- ======================================================================================================
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_GenerarPagosSimulados
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    PRINT N'Generando Pagos Simulados...';
+
+    INSERT INTO Pago.Pago (fecha, importe, cbuCuentaOrigen, idFormaPago)
+    SELECT 
+        DATEADD(DAY, 
+                5 + (ABS(CHECKSUM(NEWID())) % 6),
+                DATEFROMPARTS(
+                    CASE WHEN E.fechaPeriodoMes = 12 THEN E.fechaPeriodoAnio + 1 ELSE E.fechaPeriodoAnio END,
+                    CASE WHEN E.fechaPeriodoMes = 12 THEN 1 ELSE E.fechaPeriodoMes + 1 END,
+                    1
+                )
+        ) AS fecha,
+        CAST(
+            DE.totalaPagar * (0.70 + (ABS(CHECKSUM(NEWID())) % 31) / 100.0)
+            AS DECIMAL(18,2)
+        ) AS importe,
+        UF.CVU_CBU AS cbuCuentaOrigen,
+        1 + (ABS(CHECKSUM(NEWID())) % 3) AS idFormaPago
+    FROM Negocio.DetalleExpensa DE
+    INNER JOIN Consorcio.UnidadFuncional UF ON DE.idUnidadFuncional = UF.id
+    INNER JOIN Negocio.Expensa E ON DE.expensaId = E.id
+    WHERE 
+        (ABS(CHECKSUM(NEWID())) % 100) < 80;
+
+    PRINT ' Pagos simulados generados';
+END
+GO
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_CargaConsorciosSemilla
 AS
 BEGIN
