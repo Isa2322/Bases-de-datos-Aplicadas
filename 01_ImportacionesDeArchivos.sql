@@ -14,7 +14,9 @@ Pastori, Ximena - 42300128*/
 USE [Com5600G11]; 
 GO
 
---Funcion para cargar el archivo pagos_consorcios.csv
+--==================================================================================================================
+--Importar "pagos_consorcios"
+--==================================================================================================================
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportacionPago (@RutaArchivo VARCHAR(255))
 AS
 BEGIN
@@ -129,6 +131,10 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID('sp_ImportacionPago', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportacionPago creado exitosamente'
+GO
+
 -- Función para determinar el N-ésimo día hábil de un mes _________________________________________________  
 -- PONERLO ANTES DE  CARGAR EXPENSA O CUALQUIER OTRA QUE LA UTILICE!!!!!
 
@@ -199,7 +205,9 @@ BEGIN
 END;
 GO
 
--- servicios.servicios.json  ====================================================================
+--==================================================================================================================
+--Importar "Servicios.Servicios"
+--==================================================================================================================
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarGastosMensuales
 ( 
@@ -314,8 +322,14 @@ BEGIN
     FROM CTE_GastosPreparados AS GP;
     END 
 GO
--- ===============================================================================================================
--- IMPORTACION DE PERSONAS 
+
+IF OBJECT_ID('Operaciones.sp_ImportarGastosMensuales', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarGastosMensuales creado exitosamente'
+GO
+
+--==================================================================================================================
+--Importar "Inquilino-propietarios-datos"
+--==================================================================================================================
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarInquilinosPropietarios
     @RutaArchivo VARCHAR(255)
@@ -417,8 +431,14 @@ END
 END;
 GO
 
+IF OBJECT_ID('Operaciones.sp_ImportarInquilinosPropietarios', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarInquilinosPropietarios creado exitosamente'
+GO
+
 --==================================================================================================================
---IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios en CSV)
+--Importar "datos varios (Consorcios)"
+--==================================================================================================================
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios
     @rutaArch VARCHAR(1000)
 AS
@@ -495,9 +515,13 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID('Operaciones.sp_ImportarDatosConsorcios', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarDatosConsorcios creado exitosamente'
+GO
+
 --==================================================================================================================
---IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios en CSV)
---Antes de ejecutar esto tiene que estar cargada la tabla de GastoOrdinario
+--Importar "datos varios (Proveedores)"
+--==================================================================================================================
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores
     @rutaArch VARCHAR(1000)
@@ -629,8 +653,14 @@ BEGIN
 END;
 GO
 
+IF OBJECT_ID('Operaciones.sp_ImportarDatosProveedores', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarDatosProveedores creado exitosamente'
+GO
 
 --===============================================================================================================
+--Importar "Inquilinos-Propietarios-UF"
+--===============================================================================================================
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_CargarUF_Inquilinos
     @RutaArchivo VARCHAR(500)
 AS
@@ -724,7 +754,14 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID('Operaciones.sp_CargarUF_Inquilinos', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_CargarUF_Inquilinos creado exitosamente'
+GO
+
 --===============================================================================================================
+--Importar "UF por Consorcio"
+--===============================================================================================================
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarUFporConsorcio
     @RutaArchivo VARCHAR(500)
 AS
@@ -855,6 +892,10 @@ BEGIN
     PRINT 'Proceso de relleno de campos de Unidades Funcionales finalizado.';
 
 END
+GO
+
+IF OBJECT_ID('Operaciones.sp_ImportarUFporConsorcio', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarUFporConsorcio creado exitosamente'
 GO
 
 
