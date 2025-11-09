@@ -19,7 +19,7 @@ GO
 -- Rellenar tabla TIPO DE ROL
 --======================================================================================================
 
-CREATE OR ALTER PROCEDURE Operaciones.CargaTiposRol
+CREATE OR ALTER PROCEDURE Operaciones.sp_CargaTiposRol
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -42,15 +42,15 @@ BEGIN
 END
 GO
 
-IF OBJECT_ID('Operaciones.CargaTiposRol', 'P') IS NOT NULL
-PRINT 'Stored Procedure: Operaciones.sp_ImportarUFporConsorcio creado exitosamente'
+IF OBJECT_ID('Operaciones.sp_CargaTiposRol', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_CargaTiposRol creado exitosamente'
 GO
 
 -- ======================================================================================================
 -- Rellenar tabla FORMAS DE PAGO
 -- ======================================================================================================
 
-CREATE OR ALTER PROCEDURE Operaciones.SP_CrearYcargar_FormasDePago
+CREATE OR ALTER PROCEDURE Operaciones.sp_CrearYcargar_FormasDePago
 AS
 BEGIN
     
@@ -82,8 +82,8 @@ BEGIN
 END
 GO
 
-IF OBJECT_ID('Operaciones.SP_CrearYcargar_FormasDePago', 'P') IS NOT NULL
-PRINT 'Stored Procedure: Operaciones.SP_CrearYcargar_FormasDePago creado exitosamente'
+IF OBJECT_ID('Operaciones.sp_CrearYcargar_FormasDePago', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_CrearYcargar_FormasDePago creado exitosamente'
 GO
 
 -- ======================================================================================================

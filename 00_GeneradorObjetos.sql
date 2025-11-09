@@ -66,7 +66,9 @@ GO
 USE [Com5600G11]
 GO
 
---   CREACION  DE  ESQUEMAS  _________________________________________________________
+-- ====================================================================
+--   CREACION  DE  ESQUEMAS
+-- ====================================================================
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Operaciones')
 BEGIN
     EXEC('CREATE SCHEMA Operaciones');

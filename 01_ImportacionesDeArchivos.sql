@@ -131,7 +131,7 @@ BEGIN
 END
 GO
 
-IF OBJECT_ID('sp_ImportacionPago', 'P') IS NOT NULL
+IF OBJECT_ID('Operaciones.sp_ImportacionPago', 'P') IS NOT NULL
 PRINT 'Stored Procedure: Operaciones.sp_ImportacionPago creado exitosamente, las modificaciones seran insertadas en la tabla "Pago.Pago"'
 GO
 
