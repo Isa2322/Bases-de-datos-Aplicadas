@@ -14,7 +14,9 @@ Pastori, Ximena - 42300128*/
 USE [Com5600G11]; 
 GO
 
--- TIPO DE ROL
+--======================================================================================================
+-- Rellenar tabla TIPO DE ROL
+--======================================================================================================
 
 CREATE OR ALTER PROCEDURE Operaciones.CargaTiposRol
 AS
@@ -39,8 +41,9 @@ BEGIN
 END
 GO
 
-
--- FORMAS DE PAGO
+-- ======================================================================================================
+-- Rellenar tabla FORMAS DE PAGO
+-- ======================================================================================================
 
 IF OBJECT_ID('Operaciones.SP_CrearYcargar_FormasDePago_Semilla', 'P') IS NOT NULL
     DROP PROCEDURE Operaciones.SP_CrearYcargar_FormasDePago_Semilla
@@ -78,9 +81,10 @@ BEGIN
 END
 GO
 
+-- ======================================================================================================
+-- Rellenar tabla COCHERA
+-- ======================================================================================================
 
--- ============================================================================
---Rellenar tabla COCHERA
 CREATE OR ALTER PROCEDURE Operaciones.sp_RellenarCocheras
 AS
 BEGIN
@@ -137,8 +141,10 @@ BEGIN
     PRINT '>> Cocheras generadas exitosamente.';
 END;
 GO
--- ============================================================================
---Rellenar tabla BAULERA
+-- ======================================================================================================
+-- Rellenar tabla BAULERA
+-- ======================================================================================================
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_RellenarBauleras
 AS
 BEGIN
@@ -194,7 +200,9 @@ BEGIN
 END;
 GO
 
--- PAGO APLICADO
+-- ======================================================================================================
+-- Rellenar tabla PAGO APLICADO
+-- ======================================================================================================
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_AplicarPagosACuentas
 AS
@@ -259,14 +267,10 @@ BEGIN
 END
 GO
 
+-- ======================================================================================================
+-- Rellenar GASTOS EXTRAORDINARIOS
+-- ======================================================================================================
 
-/*USE [Com5600G11];
-GO*/
-
--- =============================================
--- CARGA DE GASTOS EXTRAORDINARIOS
--- =============================================
---NUEVO--
 CREATE OR ALTER PROCEDURE Negocio.sp_CargarGastosExtraordinarios
 AS
 BEGIN
@@ -385,7 +389,10 @@ GO*/
 
 */
 
---NUEVO--
+
+-- ======================================================================================================
+-- Rellenar PAGO APLICADO
+-- ======================================================================================================
 CREATE OR ALTER PROCEDURE Operaciones.sp_AplicarPagosACuentas
 AS
 BEGIN
@@ -534,14 +541,19 @@ GO
 */
 
 /*GO*/
---Rellena tabla CuentaBancaria
+
+-- ======================================================================================================
+-- Rellenar tabla CUENTA BANCARIA
+-- ======================================================================================================
 CREATE OR ALTER PROCEDURE Operaciones.SP_generadorCuentaBancaria
 AS
 BEGIN
     SET NOCOUNT ON;
-
+	--Variable con cantidad de consorcios
+		DECLARE @cantidadConsorcios INT = (SELECT COUNT(*)FROM Consorcio.Consorcio)
+		DECLARE @i INT=1
     -- Tablas de datos de origen (sin cambios)
-    DECLARE @Nombres TABLE (nombre VARCHAR(20));
+	DECLARE @Nombres TABLE (nombre VARCHAR(20));
     INSERT INTO @Nombres VALUES ('Juan'),('Maria'),('Carlos'),('Monica'),('Jorge'),
     ('Lucia'),('Sofia'),('Damian'),('Martina'),('Diego'), ('Barbara'),('Franco'),('Valentina'),('Nicolas'),('Camila');
 
@@ -549,39 +561,34 @@ BEGIN
     INSERT INTO @Apellidos VALUES ('Perez'),('Gomez'),('Rodriguez'),('Lopez'),('Fernandez'),
     ('Garcia'),('Martinez'),('Pereira'),('Romero'),('Torres'), ('Castro'),('Maciel'),('Lipchis'),('Ramos'),('Molina');
 
-    -- 1. Crear una TABLA TEMPORAL para almacenar los datos generados y el mapeo (RN)
+    -- Paso1 Crear una TABLA TEMPORAL para almacenar los datos generados y el mapeo (RN)
     IF OBJECT_ID('tempdb..#CuentasGeneradasTemp') IS NOT NULL DROP TABLE #CuentasGeneradasTemp;
 
     CREATE TABLE #CuentasGeneradasTemp (
-        rn INT PRIMARY KEY,
+		rn INT IDENTITY(1,1) PRIMARY KEY,
         CVU_CBU CHAR(22) NOT NULL,
-        nombreTitular VARCHAR(50) NOT NULL,
+        nombreTitular VARCHAR(50)NOT NULL,
         saldo DECIMAL(10, 2)
-    );
+		)
+		--Paso2: genero valores aleatorios y los inserto en la tabla temporal
+WHILE @i <=@cantidadConsorcios
+BEGIN
+		INSERT INTO  #CuentasGeneradasTemp (CVU_CBU, nombreTitular, saldo)
+		VALUES (
+			--Genero CVU/CBU
+			RIGHT('0000000000000000000000' + CAST(ABS(CHECKSUM(NEWID())) % 1000000000000000000000 AS VARCHAR(22)), 22),
 
-    -- 2. Insertar los datos generados en la tabla temporal (Usando la CTE de forma limitada)
-    WITH CTE_Generacion AS (
-        SELECT
-            ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS rn,
-            -- Generar CBU/CVU
-            RIGHT('0000000000000000000000' + 
-                  CAST(ABS(CHECKSUM(NEWID())) % 1000000000000000000000 AS VARCHAR(22)), 22) AS CVU_CBU,
+			--Genero nombre aleatorio
+			(SELECT TOP 1 n.nombre FROM @Nombres AS n ORDER BY NEWID()) + ' ' + 
+            (SELECT TOP 1 a.apellido FROM @Apellidos AS a ORDER BY NEWID()),
 
-            -- Generar Nombre Titular
-            (SELECT TOP 1 n.nombre FROM @Nombres AS n ORDER BY NEWID()) + ' ' + 
-            (SELECT TOP 1 a.apellido FROM @Apellidos AS a ORDER BY NEWID()) AS nombreTitular,
-            
-            -- Generar Saldo
-            CAST(ROUND(((ABS(CHECKSUM(NEWID())) % 49000) + 1000), 2) AS DECIMAL(10,2)) AS saldo
-        
-        -- Generar un registro por cada Consorcio existente
-        FROM Consorcio.Consorcio
-    )
-    INSERT INTO #CuentasGeneradasTemp (rn, CVU_CBU, nombreTitular, saldo)
-    SELECT rn, CVU_CBU, nombreTitular, saldo
-    FROM CTE_Generacion;
-
-    
+			--Genero saldo aleatorio
+			CAST(ROUND(((RAND(CHECKSUM(NEWID())) * 49000) + 1000), 2) AS DECIMAL(10,2))
+	);
+	
+	SET @i += 1;
+END
+	
     -- PASO 3: Insertar las cuentas en la tabla permanente
     INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular, saldo)
     SELECT 
@@ -607,7 +614,215 @@ BEGIN
 END
 GO
 
+-- =============================================
+-- Generador de expensas
+/*
+    Lo pude probar con muy pocos datos y andaba, hay que volver
+    a testear con todas las demas tablas cargadas.
 
+    Deberia funcioar bien. para cuaquier Enero, para otros meses me tiro error
+    porque no tenia datos de mesews anteriores.
+
+    Si alguien lo prueba y funciona bien, que vea si todos los campos de expensa
+    tienen datos con un select * from Negocio.Expensa
+
+	Ver si se puede reemplazar la linea SET @NuevaExpensaID = SCOPE_IDENTITY();
+	con algo mas normal y que sepamos
+*/
+
+-- ======================================================================================================
+-- Rellenar tabla DETALLE EXPENSA
+-- ======================================================================================================
+
+CREATE OR ALTER PROCEDURE Negocio.SP_GenerarExpensasMensuales
+    @ConsorcioID INT,
+    @Anio INT,
+    @Mes INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- Variables para el nuevo encabezado de Expensa
+    DECLARE @NuevaExpensaID INT;
+    DECLARE @SaldoAnteriorConsorcio DECIMAL(18,2);
+    DECLARE @TotalIngresosMes DECIMAL(18,2);
+    DECLARE @TotalGastoOrd DECIMAL(18,2);
+    DECLARE @TotalGastoExt DECIMAL(18,2);
+    DECLARE @EgresosTotales DECIMAL(18,2);
+    DECLARE @SaldoCierre DECIMAL(18,2);
+
+    -- Variables para buscar el mes anterior
+    DECLARE @FechaMesAnterior DATE = DATEADD(MONTH, -1, DATEFROMPARTS(@Anio, @Mes, 1));
+    DECLARE @AnioAnterior INT = YEAR(@FechaMesAnterior);
+    DECLARE @MesAnterior INT = MONTH(@FechaMesAnterior);
+
+    BEGIN TRY
+        -- Obtener saldo anterior del consorcio
+        SELECT @SaldoAnteriorConsorcio = ISNULL(saldoCierre, 0)
+        FROM Negocio.Expensa
+        WHERE consorcioId = @ConsorcioID
+          AND fechaPeriodoAnio = @AnioAnterior
+          AND fechaPeriodoMes = @MesAnterior;
+
+        -- Busco el total de ingresos del mes anterior
+        SELECT @TotalIngresosMes = ISNULL(SUM(de.pagosRecibidos), 0)
+        FROM Negocio.DetalleExpensa AS de
+        INNER JOIN Negocio.Expensa AS e ON de.expensaId = e.id
+        WHERE e.consorcioId = @ConsorcioID
+          AND e.fechaPeriodoAnio = @AnioAnterior
+          AND e.fechaPeriodoMes = @MesAnterior;
+
+        -- Gastos Ordinarios
+        SELECT @TotalGastoOrd = ISNULL(SUM(importeTotal), 0)
+        FROM Negocio.GastoOrdinario
+        WHERE IdExpensa IS NULL
+          AND consorcioId = @ConsorcioID
+          AND YEAR(fechaEmision) = @Anio
+          AND MONTH(fechaEmision) = @Mes;
+          
+        -- Gastos Extraordinarios
+        SELECT @TotalGastoExt = ISNULL(SUM(importeTotal), 0)
+        FROM Negocio.GastoExtraordinario
+        WHERE IdExpensa IS NULL
+          AND consorcioId = @ConsorcioID
+          AND YEAR(fechaEmision) = @Anio
+          AND MONTH(fechaEmision) = @Mes;
+
+        SET @EgresosTotales = @TotalGastoOrd + @TotalGastoExt;
+        
+        -- Saldo de Cierre
+        SET @SaldoCierre = @SaldoAnteriorConsorcio + @TotalIngresosMes - @EgresosTotales;
+
+        -- CREO LA EXPENSA
+        INSERT INTO Negocio.Expensa 
+            (consorcioId, fechaPeriodoAnio, fechaPeriodoMes, 
+             saldoAnterior, ingresosEnTermino, egresos, saldoCierre)
+        VALUES 
+            (@ConsorcioID, @Anio, @Mes, 
+             @SaldoAnteriorConsorcio, @TotalIngresosMes, @EgresosTotales, @SaldoCierre);
+        
+        SET @NuevaExpensaID = SCOPE_IDENTITY(); 
+
+        -- Gastos pendientes apuntan a la nueva expensa
+        UPDATE Negocio.GastoOrdinario
+        SET IdExpensa = @NuevaExpensaID
+        WHERE IdExpensa IS NULL
+          AND consorcioId = @ConsorcioID
+          AND YEAR(fechaEmision) = @Anio
+          AND MONTH(fechaEmision) = @Mes;
+        
+        UPDATE Negocio.GastoExtraordinario
+        SET IdExpensa = @NuevaExpensaID
+        WHERE IdExpensa IS NULL
+          AND consorcioId = @ConsorcioID
+          AND YEAR(fechaEmision) = @Anio
+          AND MONTH(fechaEmision) = @Mes;
+
+        -- Crear detalle de expensas por unidad funcional
+        WITH DeudaMesAnterior AS (
+            SELECT
+                de.idUnidadFuncional,
+                (de.totalaPagar - ISNULL(de.pagosRecibidos, 0)) AS SaldoDeudor
+            FROM Negocio.DetalleExpensa AS de
+            INNER JOIN Negocio.Expensa AS e ON de.expensaId = e.id
+            WHERE e.consorcioId = @ConsorcioID
+              AND e.fechaPeriodoAnio = @AnioAnterior
+              AND e.fechaPeriodoMes = @MesAnterior
+        )
+        
+        INSERT INTO Negocio.DetalleExpensa 
+            (expensaId, idUnidadFuncional, 
+             prorrateoOrdinario, prorrateoExtraordinario, 
+             saldoAnteriorAbonado,
+             interesMora, 
+             pagosRecibidos,
+             totalaPagar)
+        SELECT
+            @NuevaExpensaID, -- El ID de la nueva expensa
+            uf.id,           -- El ID de la unidad funcional
+            
+            -- Prorrateo Ordinario
+            ISNULL((@TotalGastoOrd * (uf.porcentajeExpensas / 100)), 0),
+            
+            -- Prorrateo Extraordinario
+            ISNULL((@TotalGastoExt * (uf.porcentajeExpensas / 100)), 0),
+
+            -- Deuda 
+            ISNULL(dma.SaldoDeudor, 0) AS DeudaAnterior,
+
+            -- Interés por Mora
+            CASE
+                WHEN ISNULL(dma.SaldoDeudor, 0) > 0 THEN (ISNULL(dma.SaldoDeudor, 0) * 0.05) 
+                ELSE 0
+            END AS InteresMora,
+            
+            -- Pagos recibidos
+            0.00,
+
+            -- Total a Pagar
+            ( 
+              ISNULL((@TotalGastoOrd * (uf.porcentajeExpensas / 100)), 0) +   -- Gasto Ord
+              ISNULL((@TotalGastoExt * (uf.porcentajeExpensas / 100)), 0) +   -- Gasto Ext
+              ISNULL(dma.SaldoDeudor, 0) +                                    -- Deuda
+              (CASE WHEN ISNULL(dma.SaldoDeudor, 0) > 0 THEN (ISNULL(dma.SaldoDeudor, 0) * 0.05) ELSE 0 END) -- Interés
+            ) AS TotalPagar
+
+        FROM Consorcio.UnidadFuncional AS uf
+            LEFT JOIN DeudaMesAnterior AS dma ON uf.id = dma.idUnidadFuncional
+        WHERE uf.consorcioId = @ConsorcioID;
+
+        PRINT N'Expensas generadas correctamente para ' + CAST(@Anio AS VARCHAR(4)) + '-' + CAST(@Mes AS VARCHAR(2)) + ' (ID: ' + CAST(@NuevaExpensaID AS VARCHAR(10)) + ')';
+
+    END TRY
+    BEGIN CATCH
+        PRINT N'Error al generar las expensas.';
+    END CATCH
+END
+GO
+
+
+/*
+
+
+-- ESTO NO VA !!!!!!!!!!!!!!!
+
+
+-- ======================================================================================================
+-- Rellenar tabla PAGO ?
+-- ======================================================================================================
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_GenerarPagosSimulados
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    PRINT N'Generando Pagos Simulados...';
+
+    INSERT INTO Pago.Pago (fecha, importe, cbuCuentaOrigen, idFormaPago)
+    SELECT 
+        DATEADD(DAY, 
+                5 + (ABS(CHECKSUM(NEWID())) % 6),
+                DATEFROMPARTS(
+                    CASE WHEN E.fechaPeriodoMes = 12 THEN E.fechaPeriodoAnio + 1 ELSE E.fechaPeriodoAnio END,
+                    CASE WHEN E.fechaPeriodoMes = 12 THEN 1 ELSE E.fechaPeriodoMes + 1 END,
+                    1
+                )
+        ) AS fecha,
+        CAST(
+            DE.totalaPagar * (0.70 + (ABS(CHECKSUM(NEWID())) % 31) / 100.0)
+            AS DECIMAL(18,2)
+        ) AS importe,
+        UF.CVU_CBU AS cbuCuentaOrigen,
+        1 + (ABS(CHECKSUM(NEWID())) % 3) AS idFormaPago
+    FROM Negocio.DetalleExpensa DE
+    INNER JOIN Consorcio.UnidadFuncional UF ON DE.idUnidadFuncional = UF.id
+    INNER JOIN Negocio.Expensa E ON DE.expensaId = E.id
+    WHERE 
+        (ABS(CHECKSUM(NEWID())) % 100) < 80;
+
+    PRINT ' Pagos simulados generados';
+END
+GO
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_CargaConsorciosSemilla
 AS
@@ -867,167 +1082,8 @@ BEGIN
     
 END;
 GO
--- =============================================
--- Generador de expensas
-/*
-    Lo pude probar con muy pocos datos y andaba, hay que volver
-    a testear con todas las demas tablas cargadas.
 
-    Deberia funcioar bien. para cuaquier Enero, para otros meses me tiro error
-    porque no tenia datos de mesews anteriores.
 
-    Si alguien lo prueba y funciona bien, que vea si todos los campos de expensa
-    tienen datos con un select * from Negocio.Expensa
-
-	Ver si se puede reemplazar la linea SET @NuevaExpensaID = SCOPE_IDENTITY();
-	con algo mas normal y que sepamos
-*/
-
-CREATE OR ALTER PROCEDURE Negocio.SP_GenerarExpensasMensuales
-    @ConsorcioID INT,
-    @Anio INT,
-    @Mes INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-    
-    -- Variables para el nuevo encabezado de Expensa
-    DECLARE @NuevaExpensaID INT;
-    DECLARE @SaldoAnteriorConsorcio DECIMAL(18,2);
-    DECLARE @TotalIngresosMes DECIMAL(18,2);
-    DECLARE @TotalGastoOrd DECIMAL(18,2);
-    DECLARE @TotalGastoExt DECIMAL(18,2);
-    DECLARE @EgresosTotales DECIMAL(18,2);
-    DECLARE @SaldoCierre DECIMAL(18,2);
-
-    -- Variables para buscar el mes anterior
-    DECLARE @FechaMesAnterior DATE = DATEADD(MONTH, -1, DATEFROMPARTS(@Anio, @Mes, 1));
-    DECLARE @AnioAnterior INT = YEAR(@FechaMesAnterior);
-    DECLARE @MesAnterior INT = MONTH(@FechaMesAnterior);
-
-    BEGIN TRY
-        -- Obtener saldo anterior del consorcio
-        SELECT @SaldoAnteriorConsorcio = ISNULL(saldoCierre, 0)
-        FROM Negocio.Expensa
-        WHERE consorcioId = @ConsorcioID
-          AND fechaPeriodoAnio = @AnioAnterior
-          AND fechaPeriodoMes = @MesAnterior;
-
-        -- Busco el total de ingresos del mes anterior
-        SELECT @TotalIngresosMes = ISNULL(SUM(de.pagosRecibidos), 0)
-        FROM Negocio.DetalleExpensa AS de
-        INNER JOIN Negocio.Expensa AS e ON de.expensaId = e.id
-        WHERE e.consorcioId = @ConsorcioID
-          AND e.fechaPeriodoAnio = @AnioAnterior
-          AND e.fechaPeriodoMes = @MesAnterior;
-
-        -- Gastos Ordinarios
-        SELECT @TotalGastoOrd = ISNULL(SUM(importeTotal), 0)
-        FROM Negocio.GastoOrdinario
-        WHERE IdExpensa IS NULL
-          AND consorcioId = @ConsorcioID
-          AND YEAR(fechaEmision) = @Anio
-          AND MONTH(fechaEmision) = @Mes;
-          
-        -- Gastos Extraordinarios
-        SELECT @TotalGastoExt = ISNULL(SUM(importeTotal), 0)
-        FROM Negocio.GastoExtraordinario
-        WHERE IdExpensa IS NULL
-          AND consorcioId = @ConsorcioID
-          AND YEAR(fechaEmision) = @Anio
-          AND MONTH(fechaEmision) = @Mes;
-
-        SET @EgresosTotales = @TotalGastoOrd + @TotalGastoExt;
-        
-        -- Saldo de Cierre
-        SET @SaldoCierre = @SaldoAnteriorConsorcio + @TotalIngresosMes - @EgresosTotales;
-
-        -- CREO LA EXPENSA
-        INSERT INTO Negocio.Expensa 
-            (consorcioId, fechaPeriodoAnio, fechaPeriodoMes, 
-             saldoAnterior, ingresosEnTermino, egresos, saldoCierre)
-        VALUES 
-            (@ConsorcioID, @Anio, @Mes, 
-             @SaldoAnteriorConsorcio, @TotalIngresosMes, @EgresosTotales, @SaldoCierre);
-        
-        SET @NuevaExpensaID = SCOPE_IDENTITY(); 
-
-        -- Gastos pendientes apuntan a la nueva expensa
-        UPDATE Negocio.GastoOrdinario
-        SET IdExpensa = @NuevaExpensaID
-        WHERE IdExpensa IS NULL
-          AND consorcioId = @ConsorcioID
-          AND YEAR(fechaEmision) = @Anio
-          AND MONTH(fechaEmision) = @Mes;
-        
-        UPDATE Negocio.GastoExtraordinario
-        SET IdExpensa = @NuevaExpensaID
-        WHERE IdExpensa IS NULL
-          AND consorcioId = @ConsorcioID
-          AND YEAR(fechaEmision) = @Anio
-          AND MONTH(fechaEmision) = @Mes;
-
-        -- Crear detalle de expensas por unidad funcional
-        WITH DeudaMesAnterior AS (
-            SELECT
-                de.idUnidadFuncional,
-                (de.totalaPagar - ISNULL(de.pagosRecibidos, 0)) AS SaldoDeudor
-            FROM Negocio.DetalleExpensa AS de
-            INNER JOIN Negocio.Expensa AS e ON de.expensaId = e.id
-            WHERE e.consorcioId = @ConsorcioID
-              AND e.fechaPeriodoAnio = @AnioAnterior
-              AND e.fechaPeriodoMes = @MesAnterior
-        )
-        
-        INSERT INTO Negocio.DetalleExpensa 
-            (expensaId, idUnidadFuncional, 
-             prorrateoOrdinario, prorrateoExtraordinario, 
-             saldoAnteriorAbonado,
-             interesMora, 
-             pagosRecibidos,
-             totalaPagar)
-        SELECT
-            @NuevaExpensaID, -- El ID de la nueva expensa
-            uf.id,           -- El ID de la unidad funcional
-            
-            -- Prorrateo Ordinario
-            ISNULL((@TotalGastoOrd * (uf.porcentajeExpensas / 100)), 0),
-            
-            -- Prorrateo Extraordinario
-            ISNULL((@TotalGastoExt * (uf.porcentajeExpensas / 100)), 0),
-
-            -- Deuda 
-            ISNULL(dma.SaldoDeudor, 0) AS DeudaAnterior,
-
-            -- Interés por Mora
-            CASE
-                WHEN ISNULL(dma.SaldoDeudor, 0) > 0 THEN (ISNULL(dma.SaldoDeudor, 0) * 0.05) 
-                ELSE 0
-            END AS InteresMora,
-            
-            -- Pagos recibidos
-            0.00,
-
-            -- Total a Pagar
-            ( 
-              ISNULL((@TotalGastoOrd * (uf.porcentajeExpensas / 100)), 0) +   -- Gasto Ord
-              ISNULL((@TotalGastoExt * (uf.porcentajeExpensas / 100)), 0) +   -- Gasto Ext
-              ISNULL(dma.SaldoDeudor, 0) +                                    -- Deuda
-              (CASE WHEN ISNULL(dma.SaldoDeudor, 0) > 0 THEN (ISNULL(dma.SaldoDeudor, 0) * 0.05) ELSE 0 END) -- Interés
-            ) AS TotalPagar
-
-        FROM Consorcio.UnidadFuncional AS uf
-            LEFT JOIN DeudaMesAnterior AS dma ON uf.id = dma.idUnidadFuncional
-        WHERE uf.consorcioId = @ConsorcioID;
-
-        PRINT N'Expensas generadas correctamente para ' + CAST(@Anio AS VARCHAR(4)) + '-' + CAST(@Mes AS VARCHAR(2)) + ' (ID: ' + CAST(@NuevaExpensaID AS VARCHAR(10)) + ')';
-
-    END TRY
-    BEGIN CATCH
-        PRINT N'Error al generar las expensas.';
-    END CATCH
-END
-GO
 CREATE OR ALTER PROCEDURE Operaciones.sp_GenerarGastosOrdinarios
 AS
 BEGIN
@@ -1160,36 +1216,4 @@ BEGIN
 END
 GO
 
--- SP: Generar Pagos Simulados
-CREATE OR ALTER PROCEDURE Operaciones.sp_GenerarPagosSimulados
-AS
-BEGIN
-    SET NOCOUNT ON;
-    
-    PRINT N'Generando Pagos Simulados...';
-
-    INSERT INTO Pago.Pago (fecha, importe, cbuCuentaOrigen, idFormaPago)
-    SELECT 
-        DATEADD(DAY, 
-                5 + (ABS(CHECKSUM(NEWID())) % 6),
-                DATEFROMPARTS(
-                    CASE WHEN E.fechaPeriodoMes = 12 THEN E.fechaPeriodoAnio + 1 ELSE E.fechaPeriodoAnio END,
-                    CASE WHEN E.fechaPeriodoMes = 12 THEN 1 ELSE E.fechaPeriodoMes + 1 END,
-                    1
-                )
-        ) AS fecha,
-        CAST(
-            DE.totalaPagar * (0.70 + (ABS(CHECKSUM(NEWID())) % 31) / 100.0)
-            AS DECIMAL(18,2)
-        ) AS importe,
-        UF.CVU_CBU AS cbuCuentaOrigen,
-        1 + (ABS(CHECKSUM(NEWID())) % 3) AS idFormaPago
-    FROM Negocio.DetalleExpensa DE
-    INNER JOIN Consorcio.UnidadFuncional UF ON DE.idUnidadFuncional = UF.id
-    INNER JOIN Negocio.Expensa E ON DE.expensaId = E.id
-    WHERE 
-        (ABS(CHECKSUM(NEWID())) % 100) < 80;
-
-    PRINT ' Pagos simulados generados';
-END
-GO
+*/
