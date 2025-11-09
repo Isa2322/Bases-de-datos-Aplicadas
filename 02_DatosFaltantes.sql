@@ -539,9 +539,11 @@ CREATE OR ALTER PROCEDURE Operaciones.SP_generadorCuentaBancaria
 AS
 BEGIN
     SET NOCOUNT ON;
-
+	--Variable con cantidad de consorcios
+		DECLARE @cantidadConsorcios INT = (SELECT COUNT(*)FROM Consorcio.Consorcio)
+		DECLARE @i INT=1
     -- Tablas de datos de origen (sin cambios)
-    DECLARE @Nombres TABLE (nombre VARCHAR(20));
+	DECLARE @Nombres TABLE (nombre VARCHAR(20));
     INSERT INTO @Nombres VALUES ('Juan'),('Maria'),('Carlos'),('Monica'),('Jorge'),
     ('Lucia'),('Sofia'),('Damian'),('Martina'),('Diego'), ('Barbara'),('Franco'),('Valentina'),('Nicolas'),('Camila');
 
@@ -549,39 +551,34 @@ BEGIN
     INSERT INTO @Apellidos VALUES ('Perez'),('Gomez'),('Rodriguez'),('Lopez'),('Fernandez'),
     ('Garcia'),('Martinez'),('Pereira'),('Romero'),('Torres'), ('Castro'),('Maciel'),('Lipchis'),('Ramos'),('Molina');
 
-    -- 1. Crear una TABLA TEMPORAL para almacenar los datos generados y el mapeo (RN)
+    -- Paso1 Crear una TABLA TEMPORAL para almacenar los datos generados y el mapeo (RN)
     IF OBJECT_ID('tempdb..#CuentasGeneradasTemp') IS NOT NULL DROP TABLE #CuentasGeneradasTemp;
 
     CREATE TABLE #CuentasGeneradasTemp (
-        rn INT PRIMARY KEY,
+		rn INT IDENTITY(1,1) PRIMARY KEY,
         CVU_CBU CHAR(22) NOT NULL,
-        nombreTitular VARCHAR(50) NOT NULL,
+        nombreTitular VARCHAR(50)NOT NULL,
         saldo DECIMAL(10, 2)
-    );
+		)
+		--Paso2: genero valores aleatorios y los inserto en la tabla temporal
+WHILE @i <=@cantidadConsorcios
+BEGIN
+		INSERT INTO  #CuentasGeneradasTemp (CVU_CBU, nombreTitular, saldo)
+		VALUES (
+			--Genero CVU/CBU
+			RIGHT('0000000000000000000000' + CAST(ABS(CHECKSUM(NEWID())) % 1000000000000000000000 AS VARCHAR(22)), 22),
 
-    -- 2. Insertar los datos generados en la tabla temporal (Usando la CTE de forma limitada)
-    WITH CTE_Generacion AS (
-        SELECT
-            ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS rn,
-            -- Generar CBU/CVU
-            RIGHT('0000000000000000000000' + 
-                  CAST(ABS(CHECKSUM(NEWID())) % 1000000000000000000000 AS VARCHAR(22)), 22) AS CVU_CBU,
+			--Genero nombre aleatorio
+			(SELECT TOP 1 n.nombre FROM @Nombres AS n ORDER BY NEWID()) + ' ' + 
+            (SELECT TOP 1 a.apellido FROM @Apellidos AS a ORDER BY NEWID()),
 
-            -- Generar Nombre Titular
-            (SELECT TOP 1 n.nombre FROM @Nombres AS n ORDER BY NEWID()) + ' ' + 
-            (SELECT TOP 1 a.apellido FROM @Apellidos AS a ORDER BY NEWID()) AS nombreTitular,
-            
-            -- Generar Saldo
-            CAST(ROUND(((ABS(CHECKSUM(NEWID())) % 49000) + 1000), 2) AS DECIMAL(10,2)) AS saldo
-        
-        -- Generar un registro por cada Consorcio existente
-        FROM Consorcio.Consorcio
-    )
-    INSERT INTO #CuentasGeneradasTemp (rn, CVU_CBU, nombreTitular, saldo)
-    SELECT rn, CVU_CBU, nombreTitular, saldo
-    FROM CTE_Generacion;
-
-    
+			--Genero saldo aleatorio
+			CAST(ROUND(((RAND(CHECKSUM(NEWID())) * 49000) + 1000), 2) AS DECIMAL(10,2))
+	);
+	
+	SET @i += 1;
+END
+	
     -- PASO 3: Insertar las cuentas en la tabla permanente
     INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, nombreTitular, saldo)
     SELECT 
@@ -606,8 +603,6 @@ BEGIN
 
 END
 GO
-
-
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_CargaConsorciosSemilla
 AS
