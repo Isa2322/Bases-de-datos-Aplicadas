@@ -175,7 +175,7 @@ GO
 
 
 -- Vista para descifrar (solo lectura para roles autorizados)
-CREATE OR ALTER VIEW Consorcio.vwPersonasDescifradas
+CREATE OR ALTER VIEW Operaciones.vw_PersonasDescifradas
 AS
 SELECT
     idPersona,
@@ -228,3 +228,81 @@ GO
 
 PRINT '✅ Seguridad aplicada: roles creados, datos cifrados y backups configurados.';
 GO
+
+/*
+
+/* 
+=========================================================================================
+   Ajusta el procedimiento Operaciones.sp_Reporte5_MayoresMorosos_XML
+   para usar la vista Operaciones.vw_PersonasDescifradas
+   despues de aplicar el cifrado.
+========================================================================================= */
+
+
+// PPrueba de modificacion de sp con solo Consorcio.Persona
+
+IF OBJECT_ID('Operaciones.sp_Reporte5_MayoresMorosos_XML', 'P') IS NOT NULL
+    DROP PROCEDURE Operaciones.sp_Reporte5_MayoresMorosos_XML
+GO
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte5_MayoresMorosos_XML
+    @idConsorcio INT,
+    @fechaDesde  DATE,
+    @fechaHasta  DATE = NULL
+    --solo admito q la fecha limite venga vacia
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @fechaHasta IS NULL SET @fechaHasta = CAST(GETDATE() AS DATE);
+
+    WITH DeudaPorDetalle AS 
+    (
+        SELECT 
+            de.expensaId,
+            de.idUnidadFuncional,
+            de.primerVencimiento,
+            CASE 
+                WHEN de.totalaPagar - ISNULL(de.pagosRecibidos,0) > 0 
+                THEN de.totalaPagar - ISNULL(de.pagosRecibidos,0)
+                ELSE 0 
+            END AS Deuda
+        FROM Negocio.DetalleExpensa AS de
+        WHERE (@fechaDesde IS NULL OR de.primerVencimiento >= @fechaDesde)
+          AND (@fechaHasta IS NULL OR de.primerVencimiento <= @fechaHasta)
+    ),
+    DeudaPorPersona AS 
+    (
+        SELECT
+            p.dni,
+            p.nombre,
+            p.apellido,
+            p.email,
+            p.telefono,
+            SUM(d.Deuda) AS MorosidadTotal
+        FROM DeudaPorDetalle d
+        INNER JOIN Consorcio.UnidadFuncional uf ON uf.id = d.idUnidadFuncional
+        INNER JOIN Negocio.Expensa e            ON e.id = d.expensaId
+        INNER JOIN Consorcio.Consorcio c        ON c.id = uf.consorcioId
+        -- titular por CBU/CVU registrado en la UF
+        INNER JOIN Operaciones.vw_PersonasDescifradas p
+            ON (p.CVU_CBU = uf.CVU_CBU OR p.CVU_CBU = uf.CVU_CBU)
+        WHERE (@idConsorcio IS NULL OR c.id = @idConsorcio)
+        GROUP BY p.dni, p.nombre, p.apellido, p.email, p.telefono
+        HAVING SUM(d.Deuda) > 0.01
+    )
+    SELECT
+        (
+            SELECT TOP (3)
+                p.dni              AS [@dni],
+                p.nombre           AS [nombre],
+                p.apellido         AS [apellido],
+                p.email            AS [email],
+                p.telefono         AS [telefono],
+                p.MorosidadTotal   AS [morosidad]
+            FROM DeudaPorPersona p
+            ORDER BY p.MorosidadTotal DESC
+            FOR XML PATH('propietario'), ROOT('mayoresMorosos'), TYPE
+        ) AS XML_Reporte5;
+END
+GO
+*/
