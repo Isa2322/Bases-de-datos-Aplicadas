@@ -1,10 +1,10 @@
 /* =========================================================================================
-   ENTREGA 7 - SEGURIDAD Y CIFRADO
+   ENTREGA 7 - REQUISITOS DE SEGURIDAD
    Materia: 3641 - Bases de Datos Aplicada
    Comisión: 5600
    Grupo: 11
-   Fecha: 07/11/2025
-   Archivo: 07_Seguridad_Cifrado.sql
+   Fecha: 10/11/2025
+   Archivo: 04_RequisitosDeSeguridad.sql
 
    Integrantes:
    - Hidalgo, Eduardo - 41173099
@@ -15,250 +15,216 @@
    - Pastori, Ximena - 42300128
 
    Descripción:
-   Implementación de medidas de seguridad requeridas:
-   1) Creación de roles y asignación de permisos.
-   2) Cifrado de datos sensibles/personales.
-   3) Políticas y scripts de respaldo (backup).
-
+   Implementación de los requisitos de seguridad:
+   1) Creación de roles y asignación de permisos según área.
+   2) Cifrado de datos personales y sensibles.
+   3) Definición y programación de políticas de respaldo (backup).
 ========================================================================================= */
-
-
-USE [Com5600G11];
-GO
 
 
 /* =========================================================================================
-   1️ CREACIÓN DE ROLES Y ASIGNACIÓN DE PERMISOS
+   1️⃣ CREACIÓN DE ROLES Y ASIGNACIÓN DE PERMISOS
 ========================================================================================= */
 
-IF OBJECT_ID('Operaciones.sp_SeguridadCifrado') IS NOT NULL
-    DROP PROCEDURE Operaciones.sp_SeguridadCifrado;
+
+USE [master]
 GO
 
-CREATE PROCEDURE Operaciones.sp_SeguridadCifrado
-AS
+------------------ CREACIÓN DE LOGIN ------------------
+
+
+IF SUSER_ID('administrativoGeneral') IS NULL
 BEGIN
-    SET NOCOUNT ON;
-
-
-PRINT '--- Creando roles de seguridad ---';
-
--- Eliminamos roles previos si existieran
-IF EXISTS (SELECT *
-    FROM sys.database_principals
-    WHERE name = 'AdministrativoGeneral')
-    DROP ROLE AdministrativoGeneral;
-IF EXISTS (SELECT * 
-FROM sys.database_principals
-    WHERE name = 'AdministrativoBancario')
-    DROP ROLE AdministrativoBancario;
-IF EXISTS (SELECT * 
-    FROM sys.database_principals
-    WHERE name = 'AdministrativoOperativo')
-    DROP ROLE AdministrativoOperativo;
-IF EXISTS (SELECT *
-    FROM sys.database_principals
-    WHERE name = 'Sistemas')
-    DROP ROLE Sistemas
-
-
--- Creación de roles
-CREATE ROLE AdministrativoGeneral;
-CREATE ROLE AdministrativoBancario;
-CREATE ROLE AdministrativoOperativo;
-CREATE ROLE Sistemas;
-
-
-PRINT '--- Asignando permisos por área ---';
-
--- Administrativo General: puede modificar las Unidades Funcionales (UF) y ejecutar los SP de operaciones.
-GRANT SELECT, INSERT, UPDATE, DELETE ON 
-    Consorcio.UnidadFuncional TO
-    AdministrativoGeneral;
-GRANT EXECUTE ON SCHEMA::Operaciones TO
-    AdministrativoGeneral;
-
--- Administrativo Bancario: tiene permiso para ejecutar el procedimiento de importación de pagos
--- y para leer cosas del esquema Pago (no puede modificar UF).
-GRANT EXECUTE ON OBJECT::Pago.sp_ImportacionPago TO
-    AdministrativoBancario;
-GRANT SELECT ON SCHEMA::Pago TO
-    AdministrativoBancario;
-GRANT EXECUTE ON SCHEMA::Operaciones TO
-    AdministrativoBancario;
-
--- Administrativo Operativo: puede consultar/actualizar UF (menos privilegios que AdministrativoGeneral)
-GRANT SELECT, UPDATE ON Consorcio.UnidadFuncional TO
-    AdministrativoOperativo;
-GRANT EXECUTE ON SCHEMA::Operaciones TO 
-    AdministrativoOperativo;
-
--- Sistemas: rol técnico. Solo ejecución de SP de operaciones y ver definiciones (para tareas de mantenimiento).
-GRANT EXECUTE ON SCHEMA::Operaciones TO 
-    Sistemas;
-GRANT VIEW DEFINITION TO 
-    Sistemas;
-
-
-PRINT '--- Roles y permisos asignados correctamente ---';
-
-
-/* =========================================================================================
-
-   CIFRADO DE DATOS SENSIBLES
-   Se aplicará cifrado simétrico (AES_256) sobre datos personales de la tabla Persona:
-   - DNI
-   - Email
-   - CVU / CBU
-
-========================================================================================= */
-
-PRINT '--- Creando llaves de cifrado ---';
-
-/*
- Usamos MASTER KEY + CERTIFICATE + SYMMETRIC KEY (AES_256).
- La contraseña de MASTER KEY está hardcodeada para el TP, en prod seria un secreto seguro.
-*/
-
--- Crear MASTER KEY (solo una vez)
-IF NOT EXISTS 
-    (SELECT *
-    FROM sys.symmetric_keys
-    WHERE name LIKE '%DatabaseMasterKey%')
-BEGIN
-    CREATE MASTER KEY ENCRYPTION BY PASSWORD = 'ClaveFuerte@2024';
+    CREATE LOGIN administrativoGeneral
+		WITH PASSWORD = 'admin#123',
+		CHECK_POLICY = ON,
+		DEFAULT_DATABASE = [Com5600G11];
 END
+GO
 
-
--- Crear CERTIFICADO
-IF NOT EXISTS 
-    (SELECT *
-    FROM sys.certificates
-    WHERE name = 'CertificadoSeguridad')
+IF SUSER_ID('administrativoBancario') IS NULL
 BEGIN
-    CREATE CERTIFICATE CertificadoSeguridad
-    WITH SUBJECT = 'Cifrado de datos personales en Consorcio.Persona';
+    CREATE LOGIN administrativoBancario
+		WITH PASSWORD = 'supervisor2024*',
+		CHECK_POLICY = ON,
+		DEFAULT_DATABASE = [Com5600G11];
 END
+GO
 
 
--- Crear LLAVE SIMÉTRICA con AES_256
-IF NOT EXISTS
-    (SELECT *
-    FROM sys.symmetric_keys
-    WHERE name = 'LlaveCifrado')
+IF SUSER_ID('administrativoOperativo') IS NULL
 BEGIN
-    CREATE SYMMETRIC KEY LlaveCifrado
-    WITH ALGORITHM = AES_256
-    ENCRYPTION BY CERTIFICATE CertificadoSeguridad;
+    CREATE LOGIN administrativoOperativo
+		WITH PASSWORD = 'oper#4321',
+		CHECK_POLICY = ON,
+		DEFAULT_DATABASE = [Com5600G11];
 END
+GO
+
+IF SUSER_ID('sistemas') IS NULL
+BEGIN
+    CREATE LOGIN sistemas
+		WITH PASSWORD = 'sistemas#4321',
+		CHECK_POLICY = ON,
+		DEFAULT_DATABASE = [Com5600G11];
+END
+GO
 
 
-PRINT '--- Aplicando cifrado sobre tabla Persona ---';
+-------------------------------------------------------
+----------------- CREACIÓN DE USUARIO -----------------
+-------------------------------------------------------
 
--- Agregamos columnas cifradas si no existen
-IF COL_LENGTH('Consorcio.Persona', 'DNI_Encriptado') IS NULL
-    ALTER TABLE Consorcio.Persona 
-    ADD DNI_Encriptado VARBINARY(MAX);
-IF COL_LENGTH('Consorcio.Persona', 'Email_Encriptado') IS NULL
-    ALTER TABLE Consorcio.Persona
-    ADD Email_Encriptado VARBINARY(MAX);
-IF COL_LENGTH('Consorcio.Persona', 'CVU_Encriptado') IS NULL
-    ALTER TABLE Consorcio.Persona
-    ADD CVU_Encriptado VARBINARY(MAX);
+USE [Com5600G11]
+GO
+
+IF DATABASE_PRINCIPAL_ID('administrativoGeneral') IS NULL
+	CREATE USER administrativoGeneral FOR LOGIN administrativoGeneral WITH DEFAULT_SCHEMA = [Persona];
+GO
+
+IF DATABASE_PRINCIPAL_ID('administrativoBancario') IS NULL
+	CREATE USER administrativoBancario FOR LOGIN administrativoBancario WITH DEFAULT_SCHEMA = [Negocio];
+GO
+
+IF DATABASE_PRINCIPAL_ID('administrativoOperativo') IS NULL
+	CREATE USER administrativoOperativo FOR LOGIN administrativoOperativo WITH DEFAULT_SCHEMA = [Negocio];
+GO
+
+IF DATABASE_PRINCIPAL_ID('sistemas') IS NULL
+	CREATE USER sistemas FOR LOGIN sistemas WITH DEFAULT_SCHEMA = [Persona];
+GO
 
 
--- Ciframos los datos
-OPEN SYMMETRIC KEY LlaveCifrado DECRYPTION BY CERTIFICATE CertificadoSeguridad;
+-------------------------------------------------------
+------------------ CREACIÓN DE ROLES ------------------
+-------------------------------------------------------
+
+IF DATABASE_PRINCIPAL_ID('AdministrativosGenerales') IS NULL
+	CREATE ROLE AdministrativosGenerales AUTHORIZATION dbo;
+GO
+
+IF DATABASE_PRINCIPAL_ID('AdministrativosBancarios') IS NULL
+	CREATE ROLE AdministrativosBancarios AUTHORIZATION dbo;
+GO
+
+IF DATABASE_PRINCIPAL_ID('AdministrativosOperativos') IS NULL
+	CREATE ROLE AdministrativosOperativos AUTHORIZATION dbo;
+GO
+
+
+-------------------------------------------------------
+------------- ASIGNACIÓN DE PERMISOS ------------------
+-------------------------------------------------------
+
+
+-- Administrativo General: actualización de datos UF y generación de reportes
+GRANT SELECT, UPDATE ON SCHEMA::Consorcio TO administrativoGeneral;
+GRANT SELECT ON SCHEMA::Negocio TO administrativoGeneral;
+GRANT EXECUTE ON SCHEMA::Operaciones TO administrativoGeneral;
+
+-- Administrativo Bancario: importación de información bancaria + reportes
+GRANT SELECT, INSERT, UPDATE ON SCHEMA::Pago TO administrativoBancario;
+GRANT EXECUTE ON SCHEMA::Operaciones TO administrativoBancario;
+
+-- Administrativo Operativo: actualización de UF + reportes
+GRANT SELECT, UPDATE ON SCHEMA::Consorcio TO administrativoOperativo;
+GRANT EXECUTE ON SCHEMA::Operaciones TO administrativoOperativo;
+
+-- Sistemas: sólo reportes (lectura y ejecución)
+GRANT SELECT ON SCHEMA::Operaciones TO sistemas;
+GRANT EXECUTE ON SCHEMA::Operaciones TO sistemas;
+GO
+
+-------------------------------------------------------
+------------------ AÑADIR USUARIOS A ------------------
+------------------------ ROLES ------------------------
+-------------------------------------------------------
+
+
+
+ALTER ROLE AdministrativosGenerales ADD MEMBER administrativoGeneral;
+ALTER ROLE AdministrativosBancarios ADD MEMBER administrativoBancario;
+ALTER ROLE AdministrativosOperativos ADD MEMBER administrativoOperativo;
+ALTER ROLE Sistemas ADD MEMBER sistema;
+GO
+
+
+
+
+-------------------------------------------------------
+-------------------- ENCRIPTACIÓN ---------------------
+-------------------------------------------------------
+
+ALTER TABLE Consorcio.Persona
+ADD DNI_encriptado VARBINARY(256),
+	EmailPersona_encriptado VARBINARY(256),
+	CVU_CBU_encriptado VARBINARY(256)
+GO
+
+DECLARE @Contraseña NVARCHAR(16) = 'Contrasenia135';
 
 UPDATE Consorcio.Persona
-SET 
-    CVU_Encriptado   = EncryptByKey(Key_GUID('LlaveCifrado'), CAST(CVU_CBUPersona AS NVARCHAR(30)));
+SET DNI_encriptado = ENCRYPTBYPASSPHRASE(@Contraseña, CAST(dni AS CHAR(8)), 1, CAST(idPersona AS VARBINARY(255))),
+	Email_encriptado = ENCRYPTBYPASSPHRASE(@Contraseña, email),
+	CVU_CBU_encriptado = ENCRYPTBYPASSPHRASE(@Contraseña, CVU_CBU),
+GO
 
-CLOSE SYMMETRIC KEY LlaveCifrado;
-
-
-PRINT '--- Datos personales cifrados correctamente ---';
-
-END;
--- Creamos una vista que "desencripta" los campos para lectura controlada.
-
--- IMPORTANTE: asegurar que solo los roles adecuados tengan SELECT sobre esta vista.
+ALTER TABLE Consorcio.Persona
+DROP COLUMN idPersona, dni, email
 GO
 
 
-
-CREATE OR ALTER VIEW Consorcio.vw_PersonasLegibles
+-- Vista para descifrar (solo lectura para roles autorizados)
+CREATE OR ALTER VIEW Consorcio.vwPersonasDescifradas
 AS
-SELECT 
-    p.idPersona,           -- usa el nombre real de tu PK
-    p.nombre,
-    CONVERT(VARCHAR, DecryptByKeyAutoCert(CERT_ID('CertificadoSeguridad'), NULL, DNI_Encriptado)) AS DNI,
-    CONVERT(VARCHAR, DecryptByKeyAutoCert(CERT_ID('CertificadoSeguridad'), NULL, Email_Encriptado)) AS Email,
-    CONVERT(VARCHAR, DecryptByKeyAutoCert(CERT_ID('CertificadoSeguridad'), NULL, CVU_Encriptado)) AS CVU
-FROM Consorcio.Persona p;
+SELECT
+    idPersona,
+    nombre,
+    apellido,
+    CONVERT(NVARCHAR(50), DECRYPTBYPASSPHRASE('Contrasenia135', DNI_encriptado)) AS DNI,
+    CONVERT(NVARCHAR(100), DECRYPTBYPASSPHRASE('Contrasenia135', EmailPersona_encriptado)) AS EmailPersona,
+    CONVERT(NVARCHAR(50), DECRYPTBYPASSPHRASE('Contrasenia135', CVU_CBU_encriptado)) AS CVU_CBUPersona
+FROM Consorcio.Persona;
 GO
 
-GRANT SELECT ON Consorcio.vw_PersonasLegibles TO AdministrativoGeneral, AdministrativoOperativo, Sistemas;
+-- Solo los roles administrativos y sistemas pueden acceder
+DENY SELECT ON Consorcio.Persona TO PUBLIC;
+GRANT SELECT ON Consorcio.vwPersonasDescifradas TO AdministrativosGenerales, Sistemas;
 GO
 
 
 
 
 /* =========================================================================================
-   POLÍTICA DE BACKUP Y RECUPERACIÓN
+   3️⃣ POLÍTICAS DE RESPALDO (BACKUP)
 ========================================================================================= */
 
+-- Política general:
+--   • Backup FULL diario (00:00)
+--   • Backup diferencial cada 6 horas
+--   • Backup del log cada 1 hora
+--   • Retención: 14 días
+--   • RPO: 1 hora / RTO: 30 min
 
-
-PRINT '--- Definiendo política de backup ---';
-
--- BACKUP COMPLETO (Semanal)
-
-BACKUP DATABASE Com5600G11
-TO DISK = 'D:\Backups\Com5600G11_Full.bak'
-WITH INIT, NAME = 'Backup completo semanal - Com5600G11',
-     COMPRESSION, STATS = 10;
-
-
--- BACKUP DIFERENCIAL (Diario)
-
-BACKUP DATABASE Com5600G11
-TO DISK = 'D:\Backups\Com5600G11_Diff.bak'
-WITH DIFFERENTIAL, NAME = 'Backup diario diferencial - Com5600G11',
-     COMPRESSION, STATS = 10;
-
-
--- BACKUP DE LOG DE TRANSACCIONES (Cada 4 horas)
-
-BACKUP LOG Com5600G11
-TO DISK = 'D:\Backups\Com5600G11_Log.trn'
-WITH NOINIT, NAME = 'Backup de logs - cada 4 horas',
-     STATS = 5;
-
-PRINT '--- Backups configurados correctamente ---';
-
-/*
-    DOCUMENTACIÓN DE POLÍTICA DE RESPALDO:
-
-- Backup completo: cada domingo 00:00 hs (archivo semanal).
-- Backup diferencial: todos los días 02:00 hs (archivo diferencial diario).
-- Backup de logs: cada 4 horas (archivos .trn para poder recuperar punto en tiempo).
-- RPO (Recovery Point Objective): 4 horas (pérdida máxima aceptable).
-- RTO (Recovery Time Objective): 2 horas (tiempo objetivo para recuperar el servicio).
-- Responsable operativo: rol “Sistemas”.
-- Almacenamiento secundario: copia a NAS corporativo + copia semanal a la nube (ej. blob storage).
-- Verificación automática: crear job que valide integridad del backup
-    (RESTORE VERIFYONLY o checksums).
-- Observación: cambiar rutas D:\Backups y permisos de acceso en el
-    servidor antes de usar en producción.
-
-*/
-
-PRINT '--- Fin de script de seguridad y cifrado ---';
-
-
-END
+-- Backup completo diario
+BACKUP DATABASE [Com5600G11]
+TO DISK = 'C:\Backups\Com5600G11_FULL.bak'
+WITH INIT, COMPRESSION, NAME = 'Backup FULL diario - Com5600G11';
 GO
 
--- EJEMPLO DE INVOCACIÓN:
--- EXEC Operaciones.sp_SeguridadCifrado;
+-- Backup del log cada hora
+BACKUP LOG [Com5600G11]
+TO DISK = 'C:\Backups\Com5600G11_LOG.trn'
+WITH NOINIT, COMPRESSION, NAME = 'Backup LOG horario - Com5600G11';
+GO
+
+-- Registro programado (solo referencia)
+-- ---------------------------------------------------------
+-- JOB: Backup_Com5600G11_FULL_Diario  → Diario 00:00 hs
+-- JOB: Backup_Com5600G11_Diferencial  → Cada 6 hs
+-- JOB: Backup_Com5600G11_Log_Horario  → Cada hora
+-- RPO: 1 hora / RTO estimado: 30 min
+-- ---------------------------------------------------------
+
+PRINT '✅ Seguridad aplicada: roles creados, datos cifrados y backups configurados.';
+GO
