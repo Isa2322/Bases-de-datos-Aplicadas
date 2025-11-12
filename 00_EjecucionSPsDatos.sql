@@ -56,7 +56,7 @@ EXEC Operaciones.sp_CargarGastosExtraordinarios
 SELECT * FROM Negocio.GastoExtraordinario
 
 --Los parametros de esta ejecucion deben cambiar segun lo q se quiera generar
-EXEC Operaciones.sp_GenerarExpensasMensuales @ConsorcioID = 1, @Anio = 2025, @Mes = 7
+EXEC Operaciones.sp_GenerarExpensasMensuales @ConsorcioID = 1, @Anio = 2025, @Mes = 5
 SELECT * FROM Negocio.DetalleExpensa
 
 EXEC Operaciones.sp_RellenarCocheras
