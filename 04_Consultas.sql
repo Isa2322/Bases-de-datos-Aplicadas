@@ -29,7 +29,7 @@ BEGIN
         @IdConsorcio = C.id,
         @IdExpensa = E.id
     FROM Consorcio.Consorcio AS C
-    INNER JOIN Negocio.Expensa AS E ON E.consorcio_id = C.id
+    INNER JOIN Negocio.Expensa AS E ON E.consorcioId = C.id
     WHERE C.nombre = @NombreConsorcio 
       AND E.fechaPeriodoAnio = @PeriodoAnio 
       AND E.fechaPeriodoMes = @PeriodoMes;
@@ -331,7 +331,7 @@ BEGIN
             e.fechaEmision IS NOT NULL
             -- Filtros agragados
             AND (@Anio IS NULL OR YEAR(e.fechaEmision) = @Anio)
-            AND (@ConsorcioID IS NULL OR exp.consorcio_id = @ConsorcioID)
+            AND (@ConsorcioID IS NULL OR exp.consorcioId = @ConsorcioID)
 
         GROUP BY YEAR(e.fechaEmision), MONTH(e.fechaEmision)
     ),
@@ -359,7 +359,7 @@ BEGIN
             de.primerVencimiento IS NOT NULL
             AND de.pagosRecibidos > 0
             AND (@Anio IS NULL OR YEAR(de.primerVencimiento) = @Anio)
-            AND (@ConsorcioID IS NULL OR exp.consorcio_id = @ConsorcioID)
+            AND (@ConsorcioID IS NULL OR exp.consorcioId = @ConsorcioID)
         GROUP BY exp.fechaPeriodoAnio, exp.fechaPeriodoMes
     ),
     TopNIngresos AS (

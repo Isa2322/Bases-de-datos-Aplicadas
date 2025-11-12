@@ -69,7 +69,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes
                  AND object_id = OBJECT_ID('Negocio.Expensa'))
 BEGIN
     CREATE NONCLUSTERED INDEX IX_Expensa_ConsorcioPeriodo
-        ON Negocio.Expensa (consorcio_id, fechaPeriodoAnio, fechaPeriodoMes)
+        ON Negocio.Expensa (consorcioId, fechaPeriodoAnio, fechaPeriodoMes)
         INCLUDE (id, saldoAnterior, ingresosEnTermino, ingresosAdeudados, ingresosAdelantados, egresos, saldoCierre);
 END
 GO
