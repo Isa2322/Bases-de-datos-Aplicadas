@@ -294,7 +294,7 @@ GO
 -- ====cambio en la tabla de aplicar pagos======
 -- =============================================
 
-/*
+
 
 /*
     Resumen de cambios: 
@@ -308,6 +308,7 @@ GO
 
 */
 
+/*
 -- CAmbiaria nombre a aplicarPagos solamente
 CREATE OR ALTER PROCEDURE Operaciones.sp_AplicarPagosACuentas
 AS
