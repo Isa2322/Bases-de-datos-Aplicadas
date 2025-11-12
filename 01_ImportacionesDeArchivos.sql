@@ -14,129 +14,130 @@ Pastori, Ximena - 42300128*/
 USE [Com5600G11]; 
 GO
 
--- FORMAS DE PAGO
+--==================================================================================================================
+--Importar "pagos_consorcios"
+--==================================================================================================================
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportacionPago (@RutaArchivo VARCHAR(255))
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- 1. Declaración de variable para la Forma de Pago por defecto
+    DECLARE @DefaultFormaPagoID INT;
 
-CREATE OR ALTER PROCEDURE Pago.ImportacionPago
-	AS
-	BEGIN
+    -- 2. Verificar la existencia de Formas de Pago antes de continuar
+    SELECT TOP 1 @DefaultFormaPagoID = idFormaPago
+    FROM Pago.FormaDePago;
 
-    -- Pago en Efectivo (si aplica en la administraci�n)
-    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Efectivo en Oficina')
+    IF @DefaultFormaPagoID IS NULL
     BEGIN
-        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
-        VALUES ('Efectivo en Oficina', 'Recibo Manual');
+        -- Error si no hay formas de pago predefinidas
+        RAISERROR('Error 515: La tabla Pago.FormaDePago está vacía. Por favor, inserte al menos una forma de pago antes de importar.', 16, 1);
+        RETURN;
     END
 
-    -- Pago Electr�nico (Mercado Pago, otros)
-    IF NOT EXISTS (SELECT 1 FROM Pago.FormaDePago WHERE descripcion = 'Mercado Pago/Billetera')
-    BEGIN
-        INSERT INTO Pago.FormaDePago (descripcion, confirmacion) 
-        VALUES ('Mercado Pago/Billetera', 'ID de Transacci�n');
-    END
+    -- 3. Creación de la tabla temporal
+    IF OBJECT_ID('Operaciones.PagosConsorcioTemp') IS NOT NULL 
+        DROP TABLE Operaciones.PagosConsorcioTemp; 
 
-    PRINT N'Carga de datos de Formas de Pago finalizada.';
+    CREATE TABLE Operaciones.PagosConsorcioTemp (
+        idPago INT, 
+        fecha VARCHAR(10),
+        CVU_CBU VARCHAR(22),
+        valor VARCHAR(12)
+    );
 
-END
-GO
-
--- Función para determinar el N-ésimo día hábil de un mes _________________________________________________  
--- PONERLO ANTES DE  CARGAR EXPENSA O CUALQUIER OTRA QUE LA UTILICE!!!!!
-
---IF OBJECT_ID('Operaciones.ObtenerDiaHabil') IS NOT NULL DROP FUNCTION Operaciones.ObtenerDiaHabil;
---GO
-
-
--- servicios.servicios.json
-
-use [Com5600G11];
-go 
---Funcion para cargar el archivo pagos_consorcios.csv
-CREATE OR ALTER PROCEDURE Operaciones.ImportacionPago @RutaArchivo VARCHAR(255)
-	AS
-	BEGIN
-
-IF OBJECT_ID('Operaciones.PagosConsorcioTemp') IS NOT NULL DROP TABLE Operaciones.PagosConsorcioTemp; 
-CREATE TABLE Operaciones.PagosConsorcioTemp (
-				idPago int , 
-				fecha VARCHAR(10),
-				CVU_CBU VARCHAR(22),
-				valor varchar (12))
-
-	   IF CHARINDEX('''', @RutaArchivo) > 0 OR
+    -- 4. Validación de ruta de archivo
+    IF CHARINDEX('''', @RutaArchivo) > 0 OR
         CHARINDEX('--', @RutaArchivo) > 0 OR
-        CHARINDEX('/*', @RutaArchivo) > 0 OR 
+        CHARINDEX('/*', @RutaArchivo) > 0 OR 
         CHARINDEX('*/', @RutaArchivo) > 0 OR
         CHARINDEX(';', @RutaArchivo) > 0
     BEGIN
         RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
         RETURN;
     END
-    ELSE
-    BEGIN
-	PRINT('IMPORTANDO DATOS...')
+    
+    -- 5. Carga masiva (BULK INSERT) con manejo de errores
+    BEGIN TRY
+        PRINT('IMPORTANDO DATOS...');
         DECLARE @SQL NVARCHAR(MAX);
-    SET @SQL = '
-        BULK INSERT Operaciones.PagosConsorcioTemp
-        FROM ''' + @RutaArchivo+ '''
-        WITH
-        (
-            FIELDTERMINATOR = '','',
-            ROWTERMINATOR = ''\n'',
-            CODEPAGE = ''ACP'',
-            FIRSTROW = 2
-        );';
+        
+        SET @SQL = N'
+            BULK INSERT Operaciones.PagosConsorcioTemp
+            FROM ''' + @RutaArchivo + N'''
+            WITH
+            (
+                FIELDTERMINATOR = '','',
+                ROWTERMINATOR = ''\n'',
+                CODEPAGE = ''ACP'',
+                FIRSTROW = 2
+            );';
 
-    EXEC(@SQL);
-	END	
+        EXEC sp_executesql @SQL;
+    END TRY
+    BEGIN CATCH
+        -- Captura errores como Mens. 4861 (archivo no encontrado o bloqueado)
+        PRINT CONCAT('Error durante BULK INSERT: ', ERROR_MESSAGE());
+        -- Se aborta la ejecución si la carga falla
+        IF OBJECT_ID('Operaciones.PagosConsorcioTemp') IS NOT NULL DROP TABLE Operaciones.PagosConsorcioTemp;
+        RETURN;
+    END CATCH
 
-DELETE FROM Operaciones.PagosConsorcioTemp-- Elimino las filas nulas en caso de que se generen
-WHERE 
-    idPago IS NULL
-    AND fecha IS NULL
-    AND CVU_CBU IS NULL
-	AND valor IS NULL;
+    -- 6. Limpieza de filas nulas (manteniendo tu lógica)
+    DELETE FROM Operaciones.PagosConsorcioTemp
+    WHERE 
+        idPago IS NULL
+        AND fecha IS NULL
+        AND CVU_CBU IS NULL
+        AND valor IS NULL;
 
+    -- 7. Preparación y Transformación de datos
+    -- Quitar '$' (asumiendo que es un reemplazo directo)
+    UPDATE Operaciones.PagosConsorcioTemp
+        SET valor = REPLACE(Valor, '$', '');
 
---Preparo los valores para cargar la tabla Pago.Pago 
-UPDATE Operaciones.PagosConsorcioTemp
-	SET valor = REPLACE(Valor, '$', '')
+    -- Conversión a DECIMAL
+    UPDATE Operaciones.PagosConsorcioTemp
+        SET valor = CAST(valor AS DECIMAL(18,2));
 
+    -- Conversión de fecha (asumiendo formato 103 = dd/mm/yyyy)
+    UPDATE Operaciones.PagosConsorcioTemp
+        SET fecha = CONVERT(DATE, fecha, 103);
 
-UPDATE Operaciones.PagosConsorcioTemp
-	SET valor = CAST(valor AS DECIMAL(18,2))
+    -- 8. Asignar idFormaPago y realizar la inserción
+    
+    -- Agregar la columna para la FK
+    ALTER TABLE Operaciones.PagosConsorcioTemp
+        ADD idFormaPago INT NULL; -- Temporalmente permitimos NULLs en la temporal
 
+    -- Asignar el ID de forma de pago pre-validado (no será NULL)
+    UPDATE P
+    SET P.idFormaPago = @DefaultFormaPagoID
+    FROM Operaciones.PagosConsorcioTemp AS P;
 
-UPDATE Operaciones.PagosConsorcioTemp
-	SET fecha = CONVERT(DATE, fecha, 103)
+    -- Inserción final en la tabla principal
+    INSERT INTO Pago.Pago(fecha, importe, cbuCuentaOrigen, idFormaPago)
+    SELECT fecha, valor, CVU_CBU, idFormaPago
+    FROM Operaciones.PagosConsorcioTemp
+    WHERE idPago IS NOT NULL
+    
+    PRINT CONCAT('Importación finalizada. Filas insertadas: ', @@ROWCOUNT);
 
-ALTER TABLE Operaciones.PagosConsorcioTemp
-	ADD idFormaPago INT
-
---inserto un valor provisorio para importar a la tabla Pago.FormaDePago
-UPDATE P
-SET P.idFormaPago = (
-    SELECT TOP 1 idFormaPago
-    FROM Pago.FormaDePago
-)
-FROM Operaciones.PagosConsorcioTemp AS P;
-
-
-   INSERT INTO Pago.Pago(fecha ,importe , cbuCuentaOrigen, idFormaPago)
-   select fecha, valor,CVU_CBU,idFormaPago
-   from Operaciones.PagosConsorcioTemp
-   where idPago IS NOT NULL
-
---SELECT *from pago.pago
---SELECT *from pago.FormaDepago
---SELECT* FROM Operaciones.PagosConsorcio
-
-DROP TABLE Operaciones.PagosConsorcioTemp	
+    -- 9. Limpieza de la tabla temporal
+    IF OBJECT_ID('Operaciones.PagosConsorcioTemp') IS NOT NULL 
+        DROP TABLE Operaciones.PagosConsorcioTemp;
+        
 END
 GO
 
--- Funcion de Limpieza: Crea un nuevo lote con GO
-IF OBJECT_ID('Negocio.LimpiarNumero') IS NOT NULL DROP FUNCTION Negocio.LimpiarNumero;
+IF OBJECT_ID('Operaciones.sp_ImportacionPago', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportacionPago creado exitosamente, las modificaciones seran insertadas en la tabla "Pago.Pago"'
 GO
+
+-- Función para determinar el N-ésimo día hábil de un mes _________________________________________________  
+-- PONERLO ANTES DE  CARGAR EXPENSA O CUALQUIER OTRA QUE LA UTILICE!!!!!
+
 CREATE or alter FUNCTION Operaciones.ObtenerDiaHabil
 (
     @Año INT,
@@ -188,8 +189,6 @@ END
 GO
 
 -- Funcion de Limpieza _______________________________________________________________________________
---IF OBJECT_ID('Operaciones.LimpiarNumero') IS NOT NULL DROP FUNCTION Operaciones.LimpiarNumero;
---GO
 
 CREATE or alter FUNCTION Operaciones.LimpiarNumero (@ImporteVarchar VARCHAR(50))
 RETURNS DECIMAL(18, 2)
@@ -206,8 +205,9 @@ BEGIN
 END;
 GO
 
--- servicios.servicios.json _______________________________________________________________________________
-
+--==================================================================================================================
+--Importar "Servicios.Servicios"
+--==================================================================================================================
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarGastosMensuales
 ( 
@@ -219,140 +219,117 @@ BEGIN
 
     DECLARE @sql NVARCHAR(MAX);
     DECLARE @AnoActual INT = YEAR(GETDATE());
+    
+    -- PASO 1: Obtener el último ID de la tabla para usarlo como base.
+    -- El + 1 se agregará implícitamente al sumar el ConteoUnico (que empieza en 1)
+    DECLARE @UltimoIDBase INT;
+    SELECT @UltimoIDBase = ISNULL(IDENT_CURRENT('Negocio.GastoOrdinario'), 0);
     
-    -- 1. Tabla temporal (MODIFICADA: AÑADE MesNumerico INT)
-    IF OBJECT_ID('tempdb..#TemporalDatosServicio') IS NOT NULL DROP TABLE #TemporalDatosServicio;
+    -- 1. Tabla temporal (Resto del código de carga sin cambios)
+    IF OBJECT_ID('tempdb..#TemporalDatosServicio') IS NOT NULL DROP TABLE #TemporalDatosServicio;
+    CREATE TABLE #TemporalDatosServicio (
+        NombreConsorcio VARCHAR(100),
+        Mes VARCHAR(20),
+        TipoGastoBruto VARCHAR(25), 
+        Importe DECIMAL(18, 2),
+        MesNumerico INT
+    );
+
+    IF CHARINDEX('''', @ruta) > 0 OR CHARINDEX('--', @ruta) > 0 OR
+        CHARINDEX('/*', @ruta) > 0 OR CHARINDEX('*/', @ruta) > 0 OR
+        CHARINDEX(';', @ruta) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END
+    ELSE
+    BEGIN
+        SET @sql = N'
+        INSERT INTO #TemporalDatosServicio (NombreConsorcio, Mes, TipoGastoBruto, Importe, MesNumerico)
+        SELECT
+            J.NombreConsorcio, J.Mes, T.TipoGastoBruto, Operaciones.LimpiarNumero(T.ImporteBruto),
+            CASE LTRIM(RTRIM(LOWER(J.Mes)))
+                WHEN ''enero'' THEN 1 WHEN ''febrero'' THEN 2 WHEN ''marzo'' THEN 3
+                WHEN ''abril'' THEN 4 WHEN ''mayo'' THEN 5 WHEN ''junio'' THEN 6
+                WHEN ''julio'' THEN 7 WHEN ''agosto'' THEN 8 WHEN ''septiembre'' THEN 9
+                WHEN ''octubre'' THEN 10 WHEN ''noviembre'' THEN 11 WHEN ''diciembre'' THEN 12
+                ELSE MONTH(GETDATE()) END
+        FROM OPENROWSET (BULK ''' + @ruta + ''', SINGLE_CLOB) AS jr
+        CROSS APPLY OPENJSON(BulkColumn)
+        WITH (
+            NombreConsorcio VARCHAR(100) ''$."Nombre del consorcio"'', Mes  VARCHAR(20)  ''$.Mes'',
+            BANCARIOS  VARCHAR(50)  ''$.BANCARIOS'', LIMPIEZA  VARCHAR(50)  ''$.LIMPIEZA'',
+            ADMINISTRACION  VARCHAR(50)  ''$.ADMINISTRACION'', SEGUROS  VARCHAR(50)  ''$.SEGUROS'',
+            GASTOS_GRALES  VARCHAR(50)  ''$."GASTOS GENERALES"'', AGUA  VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Agua"'',
+            LUZ  VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Luz"''
+        ) AS J
+        CROSS APPLY (VALUES
+            (''BANCARIOS'', J.BANCARIOS), (''LIMPIEZA'', J.LIMPIEZA), (''ADMINISTRACION'', J.ADMINISTRACION),
+            (''SEGUROS'', J.SEGUROS), (''GASTOS GENERALES'', J.GASTOS_GRALES),
+            (''SERVICIOS PUBLICOS-Agua'', J.AGUA), (''SERVICIOS PUBLICOS-Luz'', J.LUZ)
+        ) AS T (TipoGastoBruto, ImporteBruto)
+        WHERE Operaciones.LimpiarNumero(T.ImporteBruto) IS NOT NULL
+            AND Operaciones.LimpiarNumero(T.ImporteBruto) > 0;';
+        EXEC sp_executesql @sql
+    END;
     
-    CREATE TABLE #TemporalDatosServicio (
-        NombreConsorcio VARCHAR(100),
-        Mes VARCHAR(20),
-        TipoGastoBruto VARCHAR(50), 
-        Importe DECIMAL(18, 2),
-        MesNumerico INT
-    );
-
-
--- Bloque de verificación de ruta y carga de datos
-    IF CHARINDEX('''', @ruta) > 0 OR
-        CHARINDEX('--', @ruta) > 0 OR
-        CHARINDEX('/*', @ruta) > 0 OR 
-        CHARINDEX('*/', @ruta) > 0 OR
-        CHARINDEX(';', @ruta) > 0
-    BEGIN
-        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
-        RETURN;
-    END
-    ELSE
-    BEGIN
-
-        SET @sql = N'
-        INSERT INTO #TemporalDatosServicio (NombreConsorcio, Mes, TipoGastoBruto, Importe, MesNumerico)
+    WITH CTE_GastosPreparados AS (
         SELECT
-            J.NombreConsorcio, J.Mes, T.TipoGastoBruto, Operaciones.LimpiarNumero(T.ImporteBruto),
-            CASE LTRIM(RTRIM(LOWER(J.Mes)))
-                WHEN ''enero'' THEN 1 WHEN ''febrero'' THEN 2 WHEN ''marzo'' THEN 3
-                WHEN ''abril'' THEN 4 WHEN ''mayo'' THEN 5 WHEN ''junio'' THEN 6
-                WHEN ''julio'' THEN 7 WHEN ''agosto'' THEN 8 WHEN ''septiembre'' THEN 9
-                WHEN ''octubre'' THEN 10 WHEN ''noviembre'' THEN 11 WHEN ''diciembre'' THEN 12
-                ELSE MONTH(GETDATE()) END
-        FROM OPENROWSET (BULK ''' + @ruta + ''', SINGLE_CLOB) AS jr
-        CROSS APPLY OPENJSON(BulkColumn)
-        WITH (
-            NombreConsorcio VARCHAR(100) ''$."Nombre del consorcio"'', Mes  VARCHAR(20)  ''$.Mes'',
-            BANCARIOS  VARCHAR(50)  ''$.BANCARIOS'', LIMPIEZA  VARCHAR(50)  ''$.LIMPIEZA'',
-            ADMINISTRACION  VARCHAR(50)  ''$.ADMINISTRACION'', SEGUROS  VARCHAR(50)  ''$.SEGUROS'',
-            GASTOS_GRALES  VARCHAR(50)  ''$."GASTOS GENERALES"'', AGUA  VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Agua"'',
-            LUZ  VARCHAR(50)  ''$."SERVICIOS PUBLICOS-Luz"''
-        ) AS J
-        CROSS APPLY (VALUES 
-            (''BANCARIOS'', J.BANCARIOS), (''LIMPIEZA'', J.LIMPIEZA), (''ADMINISTRACION'', J.ADMINISTRACION),
-            (''SEGUROS'', J.SEGUROS), (''GASTOS GENERALES'', J.GASTOS_GRALES),
-            (''SERVICIOS PUBLICOS-Agua'', J.AGUA), (''SERVICIOS PUBLICOS-Luz'', J.LUZ)     
-        ) AS T (TipoGastoBruto, ImporteBruto)
-        WHERE Operaciones.LimpiarNumero(T.ImporteBruto) IS NOT NULL 
-            AND Operaciones.LimpiarNumero(T.ImporteBruto) > 0;';
-        EXEC sp_executesql @sql
-    end
-    
-    -- Bloque de Inserción
-    BEGIN TRY
-        INSERT INTO Negocio.GastoOrdinario (
-            idExpensa, 
-            nombreEmpresaoPersona,
-            fechaEmision, 
-            importeTotal, 
-            detalle, 
-            tipoServicio,
-            nroFactura
-        )
-        SELECT
-            E.id AS idExpensa, 
-            S.TipoGastoBruto AS nombreEmpresaoPersona,
-        
-            -- Se usa una fecha simplificada para la emisión (Día 1 del mes y Año actual)
-            DATEFROMPARTS(
-                @AnoActual,
-                S.MesNumerico,
-                1 -- Día 1
-            ) AS fechaEmision, 
-            S.Importe AS importeTotal,
-            null AS detalle,
-            S.TipoGastoBruto AS tipoServicio,
-
-            -- Generación de nroFactura (10 dígitos: 4 + 4 + 2)
-            RIGHT('0000' + CAST(E.id AS VARCHAR(4)), 4) + -- idExpensa (4 dígitos)
-            RIGHT(
-                CAST((@AnoActual * 100) + 
-                (
-                    S.MesNumerico
-                ) AS VARCHAR(6))
-            , 4) + -- YYMM (4 dígitos)
-            RIGHT('00' + CAST(ABS(CHECKSUM(S.TipoGastoBruto)) % 100 AS VARCHAR(2)), 2) -- Hash (2 dígitos)
-            AS nroFactura
-
+            CM.id AS consorcioId,
+            S.TipoGastoBruto,
+            S.MesNumerico,
+            S.Importe,
+            -- Genera un contador único global para este lote de inserción
+            @UltimoIDBase + ROW_NUMBER() OVER (ORDER BY CM.id, S.MesNumerico, S.TipoGastoBruto) AS IDUnicoBase
         FROM #TemporalDatosServicio AS S
-            CROSS APPLY (
-            SELECT TOP 1 E.id, CM.nombre
-            FROM Negocio.Expensa AS E
-            INNER JOIN Consorcio.Consorcio AS CM ON E.consorcio_id = CM.id
-            WHERE CM.nombre = S.NombreConsorcio 
-            
-            -- FILTRO ADAPTADO A COLUMNAS INT (Ahora usa S.MesNumerico)
-            AND E.fechaPeriodoAnio = @AnoActual
-            AND E.fechaPeriodoMes = S.MesNumerico 
-            ) AS E (id, NombreConsorcio_FK)
-        
-            -- evitar duplicado por Tipo de Gasto/Expensa
-            WHERE NOT EXISTS (
-                SELECT 1 
-                FROM Negocio.GastoOrdinario AS GO
-                WHERE GO.idExpensa = E.id 
-                AND GO.tipoServicio = S.TipoGastoBruto
-            )
-            AND E.id IS NOT NULL;  
-    END TRY
-    BEGIN CATCH
-        IF ERROR_NUMBER() = 2627 
-        BEGIN
-             RAISERROR('Error: Se encontró un número de factura duplicado al generar datos. La inserción falló parcialmente.', 16, 1);
-        END
-        ELSE
-        BEGIN
-             THROW;
-        END
-    END CATCH
+        INNER JOIN Consorcio.Consorcio AS CM
+            ON CM.nombre = S.NombreConsorcio
+    )
     
-    DROP TABLE #TemporalDatosServicio;
+    INSERT INTO Negocio.GastoOrdinario (
+        idExpensa, 
+        consorcioId,
+        nombreEmpresaoPersona,
+        fechaEmision, 
+        importeTotal, 
+        detalle, 
+        tipoServicio,
+        nroFactura
+    )
+    SELECT
+        NULL AS idExpensa, 
+        GP.consorcioId,
+        GP.TipoGastoBruto AS nombreEmpresaoPersona,
+    
+        DATEFROMPARTS(
+            @AnoActual,
+            GP.MesNumerico,
+            1 -- Día 1
+        ) AS fechaEmision, 
+        GP.Importe AS importeTotal,
+        null AS detalle,
+        GP.TipoGastoBruto AS tipoServicio,
 
-END
+        -- Generación de nroFactura (4 Consorcio ID + 4 YYMM + 3 ID Base Unico = 11 dígitos)
+        RIGHT('0000' + CAST(GP.consorcioId AS VARCHAR(4)), 3) + -- Consorcio ID (4 dígitos)
+        RIGHT(
+            CAST((@AnoActual * 100) + GP.MesNumerico AS VARCHAR(6))
+        , 4) + -- YYMM (4 dígitos)
+        -- Se usa un hash simple del ID Único Base para mantener 3 dígitos
+        RIGHT('000' + CAST(ABS(CHECKSUM(GP.IDUnicoBase)) % 1000 AS VARCHAR(3)), 3) 
+        AS nroFactura
+
+    FROM CTE_GastosPreparados AS GP;
+    END 
 GO
 
-
---____________________________________________________________________________________________________________________________
--- IMPORTACION DE PERSONAS ___________________________________________________________________________________________________
-
-use [Com5600G11];
+IF OBJECT_ID('Operaciones.sp_ImportarGastosMensuales', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarGastosMensuales creado exitosamente, las modificaciones seran insertadas en la tabla "Negocio.GastoOrdinario"'
 GO
+
+--==================================================================================================================
+--Importar "Inquilino-propietarios-datos"
+--==================================================================================================================
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarInquilinosPropietarios
     @RutaArchivo VARCHAR(255)
@@ -383,7 +360,7 @@ END
         Email VARCHAR(50),
         Telefono BIGINT,
         CVU_CBU VARCHAR(22),
-        Tipo VARCHAR(20)
+        Tipo BIT
     );
 
 
@@ -393,7 +370,7 @@ END
     PRINT 'Iniciando importaci�n de: ' + @RutaArchivo;
 
     SET @sql = '
-        BULK INSERT TemporalPersonas
+        BULK INSERT #TemporalPersonas
         FROM ''' + @RutaArchivo + '''
         WITH
         (
@@ -405,8 +382,10 @@ END
 
     EXEC(@sql);
 
+
+   
 --borrar nulos
-    DELETE FROM TemporalPersonas
+    DELETE FROM #TemporalPersonas
         WHERE 
         (Nombre IS NULL OR Nombre = '') AND
         (Apellido IS NULL OR Apellido = '') AND
@@ -419,394 +398,503 @@ END
 
 -- Se insertan los archivos en las tablas correspondientes
 
-    DELETE FROM TemporalPersonas
+    DELETE FROM #TemporalPersonas
     WHERE CVU_CBU IN (
         SELECT CVU_CBU
-        FROM TemporalPersonas
+        FROM #TemporalPersonas
         GROUP BY CVU_CBU
         HAVING COUNT(*) > 1
 );
 
-    INSERT INTO Consorcio.Persona (DNI, Nombre, Apellido, CVU_CBU, Telefono, Email, Tipo)
+
+    INSERT INTO Consorcio.Persona (dni, nombre, apellido, CVU_CBU, telefono, email, idTipoRol)
     SELECT 
-        DNI,
-        LTRIM(RTRIM(nombre)) AS Nombre,
-        LTRIM(RTRIM(Apellido)) AS Apellido,
-        LTRIM(RTRIM(CVU_CBU)) AS CVU_CBU,
-        Telefono,
-        REPLACE(LTRIM(RTRIM(Email)), ' ', '') AS Email,
-        LTRIM(RTRIM(Tipo)) AS Tipo
-    FROM TemporalPersonas;
+        LTRIM(RTRIM(tp.DNI)),
+        LTRIM(RTRIM(tp.Nombre)),
+        LTRIM(RTRIM(tp.Apellido)),
+        LTRIM(RTRIM(tp.CVU_CBU)),
+        LTRIM(RTRIM(tp.Telefono)),
+        REPLACE(LTRIM(RTRIM(tp.Email)), ' ', ''),
+        CASE tp.Tipo 
+            WHEN 1 THEN 1  
+            WHEN 0 THEN 2  
+        END AS idTipoRol
+    FROM #TemporalPersonas tp
+    WHERE NOT EXISTS (
+        SELECT 1 FROM Consorcio.Persona p 
+        WHERE p.DNI = tp.DNI
+        AND p.CVU_CBU = tp.CVU_CBU
+    );
 
-    -- join de persona y cuenta bancaria por CBU para insertar con la FK
-   INSERT INTO Consorcio.CuentaBancaria (CVU_CBU, TitularId)
-    SELECT DISTINCT 
-        LTRIM(RTRIM(it.CVU_CBU)) AS cbu,
-        p.idPersona
-    FROM TemporalPersonas it
-    JOIN Consorcio.Persona p ON LTRIM(RTRIM(p.CVU_CBU)) = LTRIM(RTRIM(it.CVU_CBU))
-    WHERE it.CVU_CBU IS NOT NULL AND it.CVU_CBU <> '';
 
-
-    DROP TABLE IF EXISTS dbo.TemporalPersonas
+    DROP TABLE IF EXISTS dbo.#TemporalPersonas
 END;
 GO
 
- -- FIN IMPORTACION DE PERSONAS
---__________________________________________________________________________________________________________________________
+IF OBJECT_ID('Operaciones.sp_ImportarInquilinosPropietarios', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarInquilinosPropietarios creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.Persona"'
+GO
 
---_____________________________________________________________________________________________________________________________________
---IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios)____________________________________________________________________________
-CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios @rutaArch VARCHAR(1000)
+--==================================================================================================================
+--Importar "datos varios (Consorcios)"
+--==================================================================================================================
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios
+    @rutaArch VARCHAR(1000)
 AS
 BEGIN
-	--armo una temporal para guardar los datos
-	CREATE TABLE #TempConsorciosBulk 
-	( 
-		consorcioCSV VARCHAR(100),
-        nombreCSV VARCHAR(100),
-        direccionCSV VARCHAR(200),
-		cantUnidadesCSV INT,
-        superficieTotalCSV DECIMAL(10, 2)
-    );
+    SET NOCOUNT ON;
 
-	--sql dinamico para encontrar la ruta
-	DECLARE @sqlBulk VARCHAR(1000)
+    -- Validación básica de ruta
+    IF CHARINDEX('''', @rutaArch) > 0 
+    OR CHARINDEX('--', @rutaArch) > 0 
+    OR CHARINDEX('/*', @rutaArch) > 0 
+    OR CHARINDEX('*/', @rutaArch) > 0 
+    OR CHARINDEX(';',  @rutaArch) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END;
 
-	SET @sqlBulk = 
-			'
-            BULK INSERT #TempConsorciosBulk
-            FROM ''' + @rutaArch + '''
-            WITH (
-                FIELDTERMINATOR = '';'',
-                ROWTERMINATOR = ''\n'',
-                FIRSTROW = 2,
-                CODEPAGE = ''65001''   
-            )
-			'
-    EXEC(@sqlBulk)
-	--Dsps de esto ya tendria todo insertado en la tabla temporal
-	--Ahora tengo q pasar las cosas a la tabla real
-	--Esta actualizacion se hace comparando con el nombre, si no encuentra una coincidencia del nombre en la tabla considera q tenes un consorcio nuevo y lo inserta
-	UPDATE Consorcio
-    SET direccion = Fuente.direccionCSV, metrosCuadradosTotal = Fuente.superficieTotalCSV
-    FROM Consorcio AS Final INNER JOIN #TempConsorciosBulk AS Fuente
-    ON Final.nombre = Fuente.nombreCSV
-    INSERT INTO Consorcio 
-	(
-         nombre,
-         direccion,
-         metrosCuadradosTotal
-    )
-    SELECT Fuente.nombreCSV, Fuente.direccionCSV, Fuente.superficieTotalCSV
-    FROM #TempConsorciosBulk AS Fuente
-	WHERE NOT EXISTS 
-			(
-                SELECT 1
-                FROM Consorcio AS Final
-                WHERE Final.nombre = Fuente.nombreCSV AND Final.direccion = Fuente.direccionCSV
-            ) --basicamente aca se fija q para actualizar ya exista un consorcio con el mismo nombre y direccion y sino inserta uno nuevo
+    -- tabla temporal para importar los datos de consorcio
+    IF OBJECT_ID('tempdb..#TempConsorciosBulk') IS NOT NULL DROP TABLE #TempConsorciosBulk;
+    CREATE TABLE #TempConsorciosBulk
+    (
+        consorcioCSV        VARCHAR(100) NULL,
+        nombreCSV           VARCHAR(200) NULL,
+        direccionCSV        VARCHAR(300) NULL,
+        cantUnidadesCSV     INT          NULL,
+        superficieTotalCSV  DECIMAL(18,2) NULL
+    );
 
+    -- traigo todos los datos del archivo a la tabla temporal, uso sql dinamico pq no se puede hardcodear la ruta
+    DECLARE @sqlBulk NVARCHAR(MAX) = N'
+        BULK INSERT #TempConsorciosBulk
+        FROM ''' + @rutaArch + N'''
+        WITH (
+            FIELDTERMINATOR = '','',
+            ROWTERMINATOR   = ''0x0a'', 
+            FIRSTROW        = 2,
+            CODEPAGE        = ''65001'',
+            TABLOCK, KEEPNULLS
+        );';
+    EXEC(@sqlBulk);
+
+    -- aca voy a actualizar
+    UPDATE c
+    SET
+        c.direccion = ISNULL(t.direccionCSV, c.direccion),
+        c.metrosCuadradosTotal = ISNULL(t.superficieTotalCSV, c.metrosCuadradosTotal)
+    FROM Consorcio.Consorcio AS c
+    INNER JOIN #TempConsorciosBulk AS t
+        ON LTRIM(RTRIM(c.nombre)) = LTRIM(RTRIM(t.nombreCSV))
+    WHERE t.nombreCSV IS NOT NULL AND LTRIM(RTRIM(t.nombreCSV)) <> ''; -- Solo actualizar si el nombre es válido
+
+    -- aca inserto si el consorcio no estaba entre los ya registrados
+    --el criterio para esto es q el consorcio q tenga nombre distinto es nuevo
+    INSERT INTO Consorcio.Consorcio (nombre, direccion, metrosCuadradosTotal, CVU_CBU)
+    SELECT
+        t.nombreCSV,
+        t.direccionCSV,
+        t.superficieTotalCSV,
+        NULL AS CVU_CBU
+    FROM #TempConsorciosBulk AS t
+    WHERE 
+        t.nombreCSV IS NOT NULL 
+        AND LTRIM(RTRIM(t.nombreCSV)) <> '' -- chequeo q no sea vacio el name
+        AND NOT EXISTS --y q no existe en la tabla antes
+        (
+            SELECT 1
+            FROM Consorcio.Consorcio AS c
+            WHERE LTRIM(RTRIM(c.nombre)) = LTRIM(RTRIM(t.nombreCSV))
+        );
+
+    -- dropeo la tabla temporal
+    DROP TABLE #TempConsorciosBulk;
+    SET NOCOUNT OFF;
 END
 GO
 
-/*  PRUEBO SP
-DECLARE @rutaArchCSV VARCHAR(1000)
-SET @rutaArchCSV = 'C:\Users\camil\OneDrive\Escritorio\Facultad\BDD\datos varios(Consorcios).csv'
-EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
-*/
+IF OBJECT_ID('Operaciones.sp_ImportarDatosConsorcios', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarDatosConsorcios creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.Consorcio"'
+GO
 
---_____________________________________________________________________________________________________________________________________________________________
---IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios)____________________________________________________________________________________________________
-CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores @rutaArch VARCHAR(1000)
+--==================================================================================================================
+--Importar "datos varios (Proveedores)"
+--==================================================================================================================
+
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores
+    @rutaArch VARCHAR(1000)
 AS
 BEGIN
     SET NOCOUNT ON;
-    --tabla para el bulk insert del archivo
-    CREATE TABLE #TempProveedoresGastoOriginal 
-    (
-        tipoGasto VARCHAR(100),
-        columnaMixta VARCHAR(200),    
-        detalleAlternativo VARCHAR(200),
-        nomConsorcio VARCHAR(100)  
-    )
 
-    --tabla para los datos procesados
-    CREATE TABLE #TempProveedoresGastoProcesado 
+    -- Validar ruta para evitar inyecciones
+    IF CHARINDEX('''', @rutaArch) > 0 OR CHARINDEX('--', @rutaArch) > 0 OR
+       CHARINDEX('/*', @rutaArch) > 0 OR CHARINDEX('*/', @rutaArch) > 0 OR
+       CHARINDEX(';',  @rutaArch) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END;
+
+    -- Tablas temporales
+    IF OBJECT_ID('tempdb..#TempProveedoresBulk') IS NOT NULL DROP TABLE #TempProveedoresBulk;
+    CREATE TABLE #TempProveedoresBulk
     (
-        tipoGasto VARCHAR(100),
-        nomEmpresa VARCHAR(200),    
-        detalle VARCHAR(200),
-        nomConsorcio VARCHAR(100)  
-    )
+        tipoGasto VARCHAR(200) NULL,
+        columnaMixta VARCHAR(400) NULL,
+        detalleAlternativo VARCHAR(400) NULL,
+        nomConsorcio VARCHAR(200) NULL
+    );
+
+    IF OBJECT_ID('tempdb..#TempProveedoresProc') IS NOT NULL DROP TABLE #TempProveedoresProc;
+    CREATE TABLE #TempProveedoresProc
+    (
+        tipoGastoFull VARCHAR(200),
+        tipoBase VARCHAR(200),
+        subTipo VARCHAR(200),
+        tipoParaBD VARCHAR(200),
+        nomEmpresa VARCHAR(400),
+        detalle VARCHAR(400),
+        nomConsorcio VARCHAR(200)
+    );
 
     BEGIN TRY
-        --bulkeo asi como vino el archivo (sql dinamico para no hardcodear la ruta)
-        DECLARE @sqlBulk VARCHAR(2000);
-        SET @sqlBulk = '
-            BULK INSERT #TempProveedoresGastoOriginal
-            FROM ''' + @rutaArch + '''
+        DECLARE @sqlBulk NVARCHAR(MAX) = N'
+            BULK INSERT #TempProveedoresBulk
+            FROM ''' + @rutaArch + N'''
             WITH (
                 FIELDTERMINATOR = '';'',
-                ROWTERMINATOR = ''\n'',
-                FIRSTROW = 2, -- Asumo que tu CSV tiene encabezados
-                CODEPAGE = ''65001''
-            )'
-        EXEC (@sqlBulk)
+                ROWTERMINATOR   = ''0x0a'',
+                FIRSTROW        = 2,
+                CODEPAGE        = ''65001'',
+                TABLOCK, KEEPNULLS
+            );';
+        EXEC(@sqlBulk);
 
-        --procesamiento para extraer el detalle o poner lo q dice en la 3 columna
-        INSERT INTO #TempProveedoresGastoProcesado 
-        (
-            tipoGasto,
-            nomEmpresa,
-            detalle,
-            nomConsorcio
-        )
-        SELECT tipoGasto,
-            -- el segundo campo (tipo gasto) esta en la columna 2 antes del guion, lo extraigo
-            CASE
-                WHEN CHARINDEX('-', columnaMixta) > 0 
-                --si encuentra un - devuelve algo mayor a cero
-                THEN TRIM(LEFT(columnaMixta, CHARINDEX('-', columnaMixta) - 1))
-                --le indico con trim hasta donde cortar el dato, desde la izquierda hasta donde este el guion
-                ELSE columnaMixta 
-                --si no hay guion se usa el nombre en la columna nomas
-            END AS nomEmpresa,
-            -- el tercer campo (detalle) es o lo q viene dsps del guion o la columna 3
-            CASE
-                WHEN CHARINDEX('-', columnaMixta) > 0 
-                THEN TRIM(RIGHT(columnaMixta, LEN(columnaMixta) - CHARINDEX('-', columnaMixta)))
-                --si hay guion corto lo q haya a la derecha de el y ese es el detalle
-                ELSE detalleAlternativo 
-                -- si no hay guion, el detalle es la col 3
-            END AS detalle,
-            nomConsorcio
-        FROM
-            #TempProveedoresGastoOriginal
-        
-        --guardo en la tabla q corresponde usando la tabla procesada
-        UPDATE Negocio.GastoOrdinario
+        DECLARE @bulkRows INT = @@ROWCOUNT;
+        IF @bulkRows = 0
+        BEGIN
+            RAISERROR('No se importaron filas desde el CSV. Verifique ruta, separador ; y encabezado.', 16, 1);
+            RETURN;
+        END;
+
+        -- Limpieza básica
+        UPDATE #TempProveedoresBulk
         SET
-            GastoOrdinario.nombreEmpresaoPersona = T_Proc.nomEmpresa,
-            GastoOrdinario.detalle = T_Proc.detalle
-        FROM
-            Negocio.GastoOrdinario
-        JOIN
-            Negocio.Expensa ON GastoOrdinario.idExpensa = Expensa.id
-        JOIN
-            Consorcio.Consorcio ON Expensa.consorcio_id = Consorcio.id
-        JOIN
-            -- join con tabla procesada
-            #TempProveedoresGastoProcesado AS T_Proc 
-            -- Usamos el tipoGasto que extrajimos para el JOIN
-            ON GastoOrdinario.tipoServicio = T_Proc.tipoGasto
-            AND Consorcio.nombre = T_Proc.nomConsorcio;
+            tipoGasto = LTRIM(RTRIM(REPLACE(REPLACE(tipoGasto, CHAR(13), ''), NCHAR(65279), ''))),
+            columnaMixta = LTRIM(RTRIM(REPLACE(columnaMixta, CHAR(13), ''))),
+            detalleAlternativo = LTRIM(RTRIM(REPLACE(detalleAlternativo, CHAR(13), ''))),
+            nomConsorcio = LTRIM(RTRIM(REPLACE(REPLACE(nomConsorcio, CHAR(13), ''), NCHAR(65279), '')));
+
+        -- Procesar los datos
+        INSERT INTO #TempProveedoresProc (tipoGastoFull, tipoBase, subTipo, tipoParaBD, nomEmpresa, detalle, nomConsorcio)
+        SELECT
+            tb.tipoGasto,
+            CASE WHEN CHARINDEX('-', tb.tipoGasto) > 0
+                 THEN LTRIM(RTRIM(LEFT(tb.tipoGasto, CHARINDEX('-', tb.tipoGasto)-1)))
+                 ELSE tb.tipoGasto END,
+            CASE WHEN CHARINDEX('-', tb.tipoGasto) > 0
+                 THEN LTRIM(RTRIM(SUBSTRING(tb.tipoGasto, CHARINDEX('-', tb.tipoGasto)+1, 200)))
+                 ELSE NULL END,
+            CASE
+                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS DE ADMINISTRACION' THEN 'ADMINISTRACION'
+                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS BANCARIOS'         THEN 'BANCARIOS'
+                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS DE LIMPIEZA'       THEN 'LIMPIEZA'
+                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'SEGUROS'                   THEN 'SEGUROS'
+                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI LIKE 'SERVICIOS PUBLICOS-AGUA%' THEN 'SERVICIOS PUBLICOS-Agua'
+                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI LIKE 'SERVICIOS PUBLICOS-LUZ%'  THEN 'SERVICIOS PUBLICOS-Luz'
+                ELSE tb.tipoGasto
+            END,
+            CASE WHEN CHARINDEX('-', tb.columnaMixta) > 0
+                 THEN LTRIM(RTRIM(LEFT(tb.columnaMixta, CHARINDEX('-', tb.columnaMixta)-1)))
+                 ELSE LTRIM(RTRIM(tb.columnaMixta)) END,
+            CASE
+                WHEN NULLIF(LTRIM(RTRIM(tb.detalleAlternativo)), '') IS NOT NULL
+                    THEN LTRIM(RTRIM(tb.detalleAlternativo))
+                WHEN CHARINDEX('-', tb.columnaMixta) > 0
+                    THEN LTRIM(RTRIM(SUBSTRING(tb.columnaMixta, CHARINDEX('-', tb.columnaMixta)+1, 400)))
+                ELSE NULL
+            END,
+            tb.nomConsorcio
+        FROM #TempProveedoresBulk tb;
+
+        -- Actualizar GastoOrdinario usando consorcioId directamente
+        UPDATE g
+        SET 
+            g.nombreEmpresaoPersona = CASE 
+                WHEN UPPER(pp.tipoBase) = 'SERVICIOS PUBLICOS' AND UPPER(pp.subTipo) = 'AGUA' THEN 'AYSA'
+                WHEN UPPER(pp.tipoBase) = 'SERVICIOS PUBLICOS' AND UPPER(pp.subTipo) = 'LUZ'  THEN 'EDENOR'
+                ELSE pp.nomEmpresa
+            END,
+            g.detalle = pp.detalle
+        FROM Negocio.GastoOrdinario AS g
+        JOIN Consorcio.Consorcio AS c ON c.id = g.consorcioId
+        JOIN #TempProveedoresProc AS pp
+             ON UPPER(LTRIM(RTRIM(g.tipoServicio))) COLLATE Latin1_General_CI_AI
+                = UPPER(LTRIM(RTRIM(pp.tipoParaBD))) COLLATE Latin1_General_CI_AI
+            AND UPPER(LTRIM(RTRIM(c.nombre))) COLLATE Latin1_General_CI_AI
+                = UPPER(LTRIM(RTRIM(pp.nomConsorcio))) COLLATE Latin1_General_CI_AI;
+
+        DECLARE @upd INT = @@ROWCOUNT;
+        PRINT CONCAT('Filas importadas del CSV: ', @bulkRows);
+        PRINT CONCAT('Filas actualizadas en GastoOrdinario: ', @upd);
 
     END TRY
     BEGIN CATCH
-        PRINT 'Error durante la importacion de datos de Proveedores:';
+        PRINT 'Error durante la importación de datos de Proveedores:';
         PRINT ERROR_MESSAGE();
-    END CATCH
-    -- limpio las temps
-    DROP TABLE #TempProveedoresGastoOriginal;
-    DROP TABLE #TempProveedoresGastoProcesado;
+    END CATCH;
+
+    DROP TABLE IF EXISTS #TempProveedoresBulk;
+    DROP TABLE IF EXISTS #TempProveedoresProc;
     SET NOCOUNT OFF;
 END;
 GO
 
-/*  PRUEBO SP
-DECLARE @rutaArchCSV VARCHAR(1000)
-SET @rutaArchCSV = 'C:\Users\camil\OneDrive\Escritorio\Facultad\BDD\datos varios(Proveedores).csv'
-EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = @rutaArchCSV
-*/
+IF OBJECT_ID('Operaciones.sp_ImportarDatosProveedores', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarDatosProveedores creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.Proveedores"'
+GO
 
---___________________________________________________________________________________________________________________________________________
+--===============================================================================================================
+--Importar "Inquilinos-Propietarios-UF"
+--===============================================================================================================
 
-CREATE OR ALTER PROCEDURE CargaInquilinoPropietariosUF
-    @RutaArchivo VARCHAR(255)
+CREATE OR ALTER PROCEDURE Operaciones.sp_CargarUF_Inquilinos
+    @RutaArchivo VARCHAR(500)
 AS
 BEGIN
-    SET NOCOUNT ON; 
+    SET NOCOUNT ON;
 
-    CREATE TABLE #CargaDatosTemp (
-        CVU_CBUPersona CHAR(22),
-        consorcio VARCHAR(50), 
-        numero VARCHAR(10),
-        piso VARCHAR(10),
-        departamento VARCHAR(10)   
-    );
+    DROP TABLE IF EXISTS #TempUFInquilinos;
 
-
-    IF CHARINDEX('''', @RutaArchivo) > 0 OR
-        CHARINDEX('--', @RutaArchivo) > 0 OR
-        CHARINDEX('/*', @RutaArchivo) > 0 OR 
-        CHARINDEX('*/', @RutaArchivo) > 0 OR
-        CHARINDEX(';', @RutaArchivo) > 0
-    BEGIN
-        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
-        RETURN;
-    END
-    ELSE
-    BEGIN
-        DECLARE @SQL NVARCHAR(MAX);
-    
-        SET @SQL = N'
-            BULK INSERT #CargaDatosTemp
-            FROM ''' + @RutaArchivo + '''
-            WITH (
-                FIELDTERMINATOR = ''|'',
-                ROWTERMINATOR = ''\n'',
-                FIRSTROW = 2
-            );';
-
-        EXEC sp_executesql @SQL;
-    END
-
-    CREATE TABLE #ConsorcioTemp (
-        CVU_CBUPersona CHAR(22),
-  	  ID_Consorcio INT,
+    CREATE TABLE #TempUFInquilinos (
+        CVU_CBUPersona VARCHAR(22),
+        nombreConsorcio VARCHAR(100),
         numero VARCHAR(10),
         piso VARCHAR(10),
         departamento VARCHAR(10)
     );
 
-    INSERT INTO #ConsorcioTemp (CVU_CBUPersona, ID_Consorcio, numero, piso, departamento)
-    SELECT 
-		cd.CVU_CBUPersona,
-        c.id,
-        cd.numero,
-        cd.piso,
-        cd.departamento
-    FROM #CargaDatosTemp AS cd
-    JOIN Consorcio AS c ON cd.consorcio = c.nombre;
+        -- sanity check de ruta
+    IF CHARINDEX('''', @RutaArchivo ) > 0 OR
+       CHARINDEX('--', @RutaArchivo ) > 0 OR
+       CHARINDEX('/*', @RutaArchivo ) > 0 OR 
+       CHARINDEX('*/', @RutaArchivo ) > 0 OR
+       CHARINDEX(';',  @RutaArchivo ) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END;
 
-    -- UPDATE para registros existentes
-    UPDATE UF
-    SET 
-        UF.numero = Ctemp.numero,
-        UF.piso = Ctemp.piso,
-        UF.departamento = Ctemp.departamento,
-        UF.consorcioId = Ctemp.ID_Consorcio
-    FROM UnidadFuncional AS UF
-    INNER JOIN #ConsorcioTemp AS Ctemp ON UF.CVU_CBU = Ctemp.CVU_CBUPersona
-    WHERE 
-        ISNULL(UF.numero, '') <> ISNULL(Ctemp.numero, '') OR
-        ISNULL(UF.piso, '') <> ISNULL(Ctemp.piso, '') OR
-        ISNULL(UF.departamento, '') <> ISNULL(Ctemp.departamento, '') OR
-        UF.consorcioId <> Ctemp.ID_Consorcio;
+    DECLARE @SQL NVARCHAR(MAX) = N'
+        BULK INSERT #TempUFInquilinos
+        FROM ''' + @RutaArchivo + '''
+        WITH (
+            FIELDTERMINATOR = ''|'',
+            -- CAMBIO CLAVE: Usamos 0x0a (Line Feed) para mayor compatibilidad
+            ROWTERMINATOR = ''\n'', 
+            FIRSTROW = 2
+        );';
+    EXEC sp_executesql @SQL;
 
-	
-	INSERT INTO UnidadFuncional (CVU_CBU, numero, piso, departamento, consorcioId, metrosCuadrados, porcentajeExpensas)
-    SELECT 
-        Ctemp.CVU_CBUPersona, 
-        Ctemp.numero, 
-        Ctemp.piso, 
-        Ctemp.departamento, 
-        Ctemp.ID_Consorcio, 
-        0, 
-        0
-    FROM #ConsorcioTemp AS Ctemp
-    WHERE NOT EXISTS (
-        SELECT 1 
-        FROM UnidadFuncional AS UF 
-        WHERE UF.CVU_CBU = Ctemp.CVU_CBUPersona
-    );
+    -- DIAGNÓSTICO 1: Filas cargadas en la tabla temporal
+    DECLARE @CargasTemp INT = @@ROWCOUNT;
 
+    IF @CargasTemp = 0 
+    BEGIN
+        PRINT CONCAT('ERROR CRÍTICO: BULK INSERT cargó 0 filas. Verifique la ruta del archivo (', @RutaArchivo, ') y los permisos de SQL Server.');
+        DROP TABLE IF EXISTS #TempUFInquilinos;
+        RETURN;
+    END
+    ELSE
+    BEGIN
+        PRINT CONCAT('Filas cargadas en la temporal: ', @CargasTemp);
+    END
+    
+    DECLARE @FilasInsertadas INT;
+    
+    INSERT INTO Consorcio.UnidadFuncional (
+        CVU_CBU,
+        consorcioId,
+        numero,
+        piso,
+        departamento,
+        metrosCuadrados,    
+        porcentajeExpensas, 
+        tipo                
+    )
+    SELECT
+        LTRIM(RTRIM(I.CVU_CBUPersona)) AS CVU_CBU,
+        (
+            SELECT C.id 
+            FROM Consorcio.Consorcio AS C 
+            WHERE LTRIM(RTRIM(I.nombreConsorcio)) = C.nombre
+        )  AS consorcioId,
+        LTRIM(RTRIM(I.numero)),
+        LTRIM(RTRIM(I.piso)),
+        LTRIM(RTRIM(I.departamento)),
+        NULL, -- m2
+        NULL, -- coeficiente
+        NULL  -- tipo
+    FROM #TempUFInquilinos AS I
 
-	DROP TABLE IF EXISTS #CargaDatosTemp;
-	DROP TABLE IF EXISTS #ConsorcioTemp;
+    -- WHERE EXISTS: Validar Clave Foránea (falla si el CVU/CBU no existe en CuentaBancaria)
+    WHERE NOT EXISTS (
+        SELECT 1 
+        FROM Consorcio.UnidadFuncional AS ExistingUF 
+        WHERE ExistingUF.CVU_CBU = LTRIM(RTRIM(I.CVU_CBUPersona))
+    );
+   
+    SET @FilasInsertadas = @@ROWCOUNT;
+
+    PRINT CONCAT('Filas insertadas en UnidadFuncional: ', @FilasInsertadas);
+    DROP TABLE #TempUFInquilinos;
 END
 GO
 
---_______________________________________________________________________________________________________________________
+IF OBJECT_ID('Operaciones.sp_CargarUF_Inquilinos', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_CargarUF_Inquilinos creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.UnidadFuncional"'
+GO
+
+--===============================================================================================================
+--Importar "UF por Consorcio"
+--===============================================================================================================
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarUFporConsorcio
-@RutaArchivo VARCHAR(500)
+    @RutaArchivo VARCHAR(500)
 AS
 BEGIN
-SET NOCOUNT ON;
+    SET NOCOUNT ON;
 
-RAISERROR('--- INICIO: Importación de Unidades Funcionales por Consorcio ---', 0, 1) WITH NOWAIT;
+    -- Validación de caracteres peligrosos
+    IF CHARINDEX('''', @RutaArchivo) > 0 OR
+       CHARINDEX('--', @RutaArchivo) > 0 OR
+       CHARINDEX('/*', @RutaArchivo) > 0 OR 
+       CHARINDEX('*/', @RutaArchivo) > 0 OR
+       CHARINDEX(';', @RutaArchivo) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END
 
-IF CHARINDEX('..', @RutaArchivo) > 0 OR
-   CHARINDEX(';', @RutaArchivo) > 0 OR
-   CHARINDEX('--', @RutaArchivo) > 0 OR
-   CHARINDEX('/*', @RutaArchivo) > 0 OR
-   CHARINDEX('*/', @RutaArchivo) > 0
-BEGIN
-    RAISERROR('Error: Ruta contiene caracteres no permitidos.', 16, 1);
-    RETURN;
-END;
+    -- 1. Crear tabla temporal de importación
+    IF OBJECT_ID('tempdb..#TemporalUF') IS NOT NULL 
+        DROP TABLE #TemporalUF;
 
-IF RIGHT(LOWER(@RutaArchivo), 4) <> '.csv'
-BEGIN
-    RAISERROR('Error: Solo se permiten archivos con extensión .csv', 16, 1);
-    RETURN;
-END;
+    CREATE TABLE #TemporalUF (
+        nombreConsorcio VARCHAR(100), 
+        nroUnidadFuncional VARCHAR(50), 
+        piso VARCHAR(10), 
+        departamento VARCHAR(10), 
+        coeficiente_txt VARCHAR(10), 
+        m2_uf_txt VARCHAR(10),
+        bauleras_txt VARCHAR(10), 
+        cochera_txt VARCHAR(10), 
+        m2_baulera_txt VARCHAR(10), 
+        m2_cochera_txt VARCHAR(10)
+    );
 
-IF OBJECT_ID('tempdb..#TemporalUF') IS NOT NULL DROP TABLE #TemporalUF;
+    -- BULK INSERT
+    DECLARE @SQL NVARCHAR(MAX);
+    SET @SQL = '
+        BULK INSERT #TemporalUF
+        FROM ''' + @RutaArchivo + '''
+        WITH (
+            FIELDTERMINATOR = ''\t'',
+            ROWTERMINATOR = ''0x0a'',
+            FIRSTROW = 2,
+            CODEPAGE = ''65001''
+        );';
+    
+    EXEC sp_executesql @SQL;
 
-CREATE TABLE #TemporalUF (
-    CVU_CBU CHAR(22),
-    nombreConsorcio VARCHAR(100),
-    nroUnidadFuncional INT,
-    piso VARCHAR(10),
-    departamento VARCHAR(10)
-);
+    -- Limpieza inicial de nulos/vacíos
+    DELETE FROM #TemporalUF
+    WHERE 
+        (LTRIM(RTRIM(nombreConsorcio)) IS NULL OR LTRIM(RTRIM(nombreConsorcio)) = '')
+        OR
+        (LTRIM(RTRIM(nroUnidadFuncional)) IS NULL OR LTRIM(RTRIM(nroUnidadFuncional)) = '');
 
-DECLARE @SQL NVARCHAR(MAX);
-SET @SQL = '
-    BULK INSERT #TemporalUF
-    FROM ''' + @RutaArchivo + '''
-    WITH (
-        FIELDTERMINATOR = ''|'',
-        ROWTERMINATOR = ''0x0a'',
-        FIRSTROW = 2,
-        CODEPAGE = ''65001''
-    );
-';
-EXEC sp_executesql @SQL;
+    -- Insertar consorcios nuevos si no existen (necesario para obtener el consorcioId)
+    INSERT INTO Consorcio.Consorcio (nombre, direccion)
+    SELECT DISTINCT 
+        LTRIM(RTRIM(T.nombreConsorcio)), 
+        'Dirección desconocida'
+    FROM #TemporalUF AS T
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM Consorcio.Consorcio AS C
+        WHERE C.nombre = LTRIM(RTRIM(T.nombreConsorcio))
+    );
 
-RAISERROR('Carga en tabla temporal completada. Insertando/actualizando datos...', 0, 1) WITH NOWAIT;
+    IF OBJECT_ID('tempdb..#UFDataLimpia') IS NOT NULL 
+        DROP TABLE #UFDataLimpia;
+    
+    CREATE TABLE #UFDataLimpia (
+        consorcioId INT NOT NULL,
+        nroUnidadFuncional VARCHAR(50),
+        coeficiente DECIMAL(5, 2),
+        m2_unidad_funcional DECIMAL(10, 2),
+        tipo VARCHAR(20) NOT NULL -- Campo generado
+    );
 
-INSERT INTO Consorcio.Consorcio (nombre, direccion, metrosCuadradosTotal)
-SELECT DISTINCT T.nombreConsorcio, 'Dirección desconocida', 0
-FROM #TemporalUF AS T
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM Consorcio.Consorcio AS C
-    WHERE C.nombre = T.nombreConsorcio
-);
+    -- Insertar datos limpios en la tabla temporal, generando el campo 'tipo'
+    INSERT INTO #UFDataLimpia (consorcioId, nroUnidadFuncional, coeficiente, m2_unidad_funcional, tipo)
+    SELECT
+        C.id AS consorcioId,
+        T.nroUnidadFuncional,
+        CAST(REPLACE(T.coeficiente_txt, ',', '.') AS DECIMAL(5, 2)) AS coeficiente,
+        CAST(REPLACE(T.m2_uf_txt, ',', '.') AS DECIMAL(10, 2)) AS m2_unidad_funcional,
+        -- Lógica de generación de TIPO
+        CASE ABS(CHECKSUM(NEWID())) % 3
+        WHEN 0 THEN 'local'
+        WHEN 1 THEN 'departamento'
+        ELSE 'duplex'
+        END AS tipo
+    FROM #TemporalUF AS T
+    INNER JOIN Consorcio.Consorcio AS C 
+        ON LTRIM(RTRIM(T.nombreConsorcio)) = C.nombre;
+    
+    DECLARE @UF_Limpias INT = @@ROWCOUNT;
+    PRINT CONCAT('Filas limpias listas para actualizar: ', @UF_Limpias);
 
+    UPDATE UF
+    SET 
+        -- Rellena metrosCuadrados solo si es NULL
+        metrosCuadrados = ISNULL(UF.metrosCuadrados, UFL.m2_unidad_funcional),
+        
+        -- Rellena coeficiente (porcentajeExpensas) solo si es NULL
+        porcentajeExpensas = ISNULL(UF.porcentajeExpensas, UFL.coeficiente), 
+        
+        -- Rellena tipo solo si es NULL (usa el valor generado)
+        tipo = ISNULL(UF.tipo, UFL.tipo)
+        
+    FROM Consorcio.UnidadFuncional AS UF
+    INNER JOIN #UFDataLimpia AS UFL 
+        ON UF.consorcioId = UFL.consorcioId 
+        AND UF.numero = UFL.nroUnidadFuncional
+        
+    -- Condición para asegurar que solo actualizamos UFs que aún no tienen estos datos
+    -- Esto es opcional, pero hace el UPDATE más eficiente si solo se quiere rellenar NULLs.
+    WHERE UF.metrosCuadrados IS NULL 
+       OR UF.porcentajeExpensas IS NULL 
+       OR UF.tipo IS NULL;
+    
+    DECLARE @UF_Actualizadas INT = @@ROWCOUNT;
+    PRINT CONCAT('Unidades Funcionales actualizadas: ', @UF_Actualizadas);
 
-MERGE Consorcio.UnidadFuncional AS target
-USING (
-    SELECT 
-        T.CVU_CBU,
-        C.id AS consorcioId,
-        CAST(T.nroUnidadFuncional AS VARCHAR(10)) AS numero,
-        T.piso,
-        T.departamento
-    FROM #TemporalUF AS T
-    INNER JOIN Consorcio.Consorcio AS C ON T.nombreConsorcio = C.nombre
-) AS source
-ON target.CVU_CBU = source.CVU_CBU
-WHEN MATCHED THEN
-    UPDATE SET 
-        target.consorcioId = source.consorcioId,
-        target.numero = source.numero,
-        target.piso = source.piso,
-        target.departamento = source.departamento
-WHEN NOT MATCHED THEN
-    INSERT (CVU_CBU, consorcioId, numero, piso, departamento, metrosCuadrados, porcentajeExpensas)
-    VALUES (source.CVU_CBU, source.consorcioId, source.numero, source.piso, source.departamento, 50, 10); -- valores de prueba
+    -- 4. Limpiar tablas temporales
+    DROP TABLE #TemporalUF;
+    DROP TABLE #UFDataLimpia;
+    
+    PRINT 'Proceso de relleno de campos de Unidades Funcionales finalizado.';
 
-RAISERROR('Importación completada correctamente.', 0, 1) WITH NOWAIT;
-
-DROP TABLE #TemporalUF;
-
-RAISERROR('--- FIN: Importación de Unidades Funcionales por Consorcio ---', 0, 1) WITH NOWAIT;
-
-
-END;
+END
 GO
+
+IF OBJECT_ID('Operaciones.sp_ImportarUFporConsorcio', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarUFporConsorcio creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.UnidadFuncional"'
+GO
+
