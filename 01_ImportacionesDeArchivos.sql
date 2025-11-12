@@ -14,7 +14,9 @@ Pastori, Ximena - 42300128*/
 USE [Com5600G11]; 
 GO
 
---Funcion para cargar el archivo pagos_consorcios.csv
+--==================================================================================================================
+--Importar "pagos_consorcios"
+--==================================================================================================================
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportacionPago (@RutaArchivo VARCHAR(255))
 AS
 BEGIN
@@ -29,7 +31,7 @@ BEGIN
 
     IF @DefaultFormaPagoID IS NULL
     BEGIN
-        -- Error claro si no hay formas de pago predefinidas (Soluciona el Mensaje 515)
+        -- Error si no hay formas de pago predefinidas
         RAISERROR('Error 515: La tabla Pago.FormaDePago está vacía. Por favor, inserte al menos una forma de pago antes de importar.', 16, 1);
         RETURN;
     END
@@ -129,6 +131,10 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID('Operaciones.sp_ImportacionPago', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportacionPago creado exitosamente, las modificaciones seran insertadas en la tabla "Pago.Pago"'
+GO
+
 -- Función para determinar el N-ésimo día hábil de un mes _________________________________________________  
 -- PONERLO ANTES DE  CARGAR EXPENSA O CUALQUIER OTRA QUE LA UTILICE!!!!!
 
@@ -199,7 +205,9 @@ BEGIN
 END;
 GO
 
--- servicios.servicios.json  ====================================================================
+--==================================================================================================================
+--Importar "Servicios.Servicios"
+--==================================================================================================================
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarGastosMensuales
 ( 
@@ -314,8 +322,14 @@ BEGIN
     FROM CTE_GastosPreparados AS GP;
     END 
 GO
--- ===============================================================================================================
--- IMPORTACION DE PERSONAS 
+
+IF OBJECT_ID('Operaciones.sp_ImportarGastosMensuales', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarGastosMensuales creado exitosamente, las modificaciones seran insertadas en la tabla "Negocio.GastoOrdinario"'
+GO
+
+--==================================================================================================================
+--Importar "Inquilino-propietarios-datos"
+--==================================================================================================================
 
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarInquilinosPropietarios
     @RutaArchivo VARCHAR(255)
@@ -417,11 +431,14 @@ END
 END;
 GO
 
+IF OBJECT_ID('Operaciones.sp_ImportarInquilinosPropietarios', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarInquilinosPropietarios creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.Persona"'
+GO
 
---_____________________________________________________________________________________________________________________________________________________________
---IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios)____________________________________________________________________________________________________
 --==================================================================================================================
---IMPORTAR DATOS DE CONSORCIO (del archivo de datos varios en CSV)
+--Importar "datos varios (Consorcios)"
+--==================================================================================================================
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosConsorcios
     @rutaArch VARCHAR(1000)
 AS
@@ -429,15 +446,17 @@ BEGIN
     SET NOCOUNT ON;
 
     -- Validación básica de ruta
-    IF CHARINDEX('''', @rutaArch) > 0 OR CHARINDEX('--', @rutaArch) > 0 OR
-       CHARINDEX('/*', @rutaArch) > 0 OR CHARINDEX('*/', @rutaArch) > 0 OR
-       CHARINDEX(';',  @rutaArch) > 0
+    IF CHARINDEX('''', @rutaArch) > 0 
+    OR CHARINDEX('--', @rutaArch) > 0 
+    OR CHARINDEX('/*', @rutaArch) > 0 
+    OR CHARINDEX('*/', @rutaArch) > 0 
+    OR CHARINDEX(';',  @rutaArch) > 0
     BEGIN
         RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
         RETURN;
     END;
 
-    -- Staging
+    -- tabla temporal para importar los datos de consorcio
     IF OBJECT_ID('tempdb..#TempConsorciosBulk') IS NOT NULL DROP TABLE #TempConsorciosBulk;
     CREATE TABLE #TempConsorciosBulk
     (
@@ -448,7 +467,7 @@ BEGIN
         superficieTotalCSV  DECIMAL(18,2) NULL
     );
 
-    -- BULK (Se ajusta ROWTERMINATOR a '0x0d0a' por seguridad, ya que 0x0a puede no funcionar en Windows/SQL Server)
+    -- traigo todos los datos del archivo a la tabla temporal, uso sql dinamico pq no se puede hardcodear la ruta
     DECLARE @sqlBulk NVARCHAR(MAX) = N'
         BULK INSERT #TempConsorciosBulk
         FROM ''' + @rutaArch + N'''
@@ -461,199 +480,187 @@ BEGIN
         );';
     EXEC(@sqlBulk);
 
-
-    -- Normalización: quitar CR (CHAR(13)), BOM, y TRIM
-    UPDATE #TempConsorciosBulk
-    SET
-        nombreCSV          = LTRIM(RTRIM(REPLACE(REPLACE(nombreCSV,    CHAR(13), ''), NCHAR(65279), ''))),
-        direccionCSV       = LTRIM(RTRIM(REPLACE(REPLACE(direccionCSV, CHAR(13), ''), NCHAR(65279), ''))),
-        consorcioCSV       = LTRIM(RTRIM(REPLACE(REPLACE(consorcioCSV, CHAR(13), ''), NCHAR(65279), ''))),
-        -- Asegurar que los campos numéricos sean tratados como NULL si no se pueden convertir
-        superficieTotalCSV = CASE WHEN ISNUMERIC(superficieTotalCSV) = 1 THEN superficieTotalCSV ELSE NULL END;
-
-
-    -- 1. ACTUALIZAR existentes (UPDATE): Si la tabla está vacía, este paso afectará 0 filas.
+    -- aca voy a actualizar
     UPDATE c
     SET
-        c.direccion       = ISNULL(t.direccionCSV, c.direccion),
+        c.direccion = ISNULL(t.direccionCSV, c.direccion),
         c.metrosCuadradosTotal = ISNULL(t.superficieTotalCSV, c.metrosCuadradosTotal)
     FROM Consorcio.Consorcio AS c
     INNER JOIN #TempConsorciosBulk AS t
         ON LTRIM(RTRIM(c.nombre)) = LTRIM(RTRIM(t.nombreCSV))
     WHERE t.nombreCSV IS NOT NULL AND LTRIM(RTRIM(t.nombreCSV)) <> ''; -- Solo actualizar si el nombre es válido
 
-    -- 2. INSERTAR nuevos (INSERT): Inserta los consorcios que NO coincidieron en el UPDATE.
-    INSERT INTO Consorcio.Consorcio (nombre, direccion, metrosCuadradosTotal, CVU_CBU) -- CLAVE: Agregamos CVU_CBU
+    -- aca inserto si el consorcio no estaba entre los ya registrados
+    --el criterio para esto es q el consorcio q tenga nombre distinto es nuevo
+    INSERT INTO Consorcio.Consorcio (nombre, direccion, metrosCuadradosTotal, CVU_CBU)
     SELECT
         t.nombreCSV,
         t.direccionCSV,
         t.superficieTotalCSV,
-        NULL AS CVU_CBU -- Se inserta NULL si no se tiene el CBU en el archivo de carga.
+        NULL AS CVU_CBU
     FROM #TempConsorciosBulk AS t
     WHERE 
         t.nombreCSV IS NOT NULL 
-        AND LTRIM(RTRIM(t.nombreCSV)) <> '' -- CLAVE: Asegura que el nombre no sea nulo/vacío
-        AND NOT EXISTS (
+        AND LTRIM(RTRIM(t.nombreCSV)) <> '' -- chequeo q no sea vacio el name
+        AND NOT EXISTS --y q no existe en la tabla antes
+        (
             SELECT 1
             FROM Consorcio.Consorcio AS c
             WHERE LTRIM(RTRIM(c.nombre)) = LTRIM(RTRIM(t.nombreCSV))
-    );
+        );
 
-    -- Limpieza
+    -- dropeo la tabla temporal
     DROP TABLE #TempConsorciosBulk;
-
     SET NOCOUNT OFF;
 END
+GO
+
+IF OBJECT_ID('Operaciones.sp_ImportarDatosConsorcios', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarDatosConsorcios creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.Consorcio"'
 GO
 
 --==================================================================================================================
---IMPORTAR DATOS DE PROVEEDORES (del archivo de datos varios en CSV)
---Antes de ejecutar esto tiene que estar cargada la tabla de GastoOrdinario
+--Importar "datos varios (Proveedores)"
+--==================================================================================================================
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores
-    @rutaArch VARCHAR(1000)
+    @rutaArch VARCHAR(1000)
 AS
 BEGIN
-    SET NOCOUNT ON;
+    SET NOCOUNT ON;
 
-    -- sanity check de ruta
-    IF CHARINDEX('''', @rutaArch) > 0 OR
-       CHARINDEX('--', @rutaArch) > 0 OR
-       CHARINDEX('/*', @rutaArch) > 0 OR 
-       CHARINDEX('*/', @rutaArch) > 0 OR
-       CHARINDEX(';',  @rutaArch) > 0
-    BEGIN
-        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
-        RETURN;
-    END;
+    -- Validar ruta para evitar inyecciones
+    IF CHARINDEX('''', @rutaArch) > 0 OR CHARINDEX('--', @rutaArch) > 0 OR
+       CHARINDEX('/*', @rutaArch) > 0 OR CHARINDEX('*/', @rutaArch) > 0 OR
+       CHARINDEX(';',  @rutaArch) > 0
+    BEGIN
+        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RETURN;
+    END;
 
-    -- staging original
-    IF OBJECT_ID('tempdb..#TempProveedoresGastoOriginal') IS NOT NULL DROP TABLE #TempProveedoresGastoOriginal;
-    CREATE TABLE #TempProveedoresGastoOriginal
-    (
-        tipoGasto          VARCHAR(200) NULL,
-        columnaMixta       VARCHAR(400) NULL,
-        detalleAlternativo VARCHAR(400) NULL,
-        nomConsorcio       VARCHAR(200) NULL
-    );
+    -- Tablas temporales
+    IF OBJECT_ID('tempdb..#TempProveedoresBulk') IS NOT NULL DROP TABLE #TempProveedoresBulk;
+    CREATE TABLE #TempProveedoresBulk
+    (
+        tipoGasto VARCHAR(200) NULL,
+        columnaMixta VARCHAR(400) NULL,
+        detalleAlternativo VARCHAR(400) NULL,
+        nomConsorcio VARCHAR(200) NULL
+    );
 
-    -- staging procesado
-    IF OBJECT_ID('tempdb..#TempProveedoresGastoProcesado') IS NOT NULL DROP TABLE #TempProveedoresGastoProcesado;
-    CREATE TABLE #TempProveedoresGastoProcesado
-    (
-        tipoGasto    VARCHAR(200),
-        nomEmpresa   VARCHAR(400),
-        detalle      VARCHAR(400),
-        nomConsorcio VARCHAR(200)
-    );
+    IF OBJECT_ID('tempdb..#TempProveedoresProc') IS NOT NULL DROP TABLE #TempProveedoresProc;
+    CREATE TABLE #TempProveedoresProc
+    (
+        tipoGastoFull VARCHAR(200),
+        tipoBase VARCHAR(200),
+        subTipo VARCHAR(200),
+        tipoParaBD VARCHAR(200),
+        nomEmpresa VARCHAR(400),
+        detalle VARCHAR(400),
+        nomConsorcio VARCHAR(200)
+    );
 
-    BEGIN TRY
-        DECLARE @sqlBulk NVARCHAR(MAX) = N'
-            BULK INSERT #TempProveedoresGastoOriginal
-            FROM ''' + @rutaArch + N'''
-            WITH (
-                FIELDTERMINATOR = '';'',
-                ROWTERMINATOR   = ''0x0a'',
-                FIRSTROW        = 2,
-                CODEPAGE        = ''65001'',
-                TABLOCK,
-                KEEPNULLS
-            );';
+    BEGIN TRY
+        DECLARE @sqlBulk NVARCHAR(MAX) = N'
+            BULK INSERT #TempProveedoresBulk
+            FROM ''' + @rutaArch + N'''
+            WITH (
+                FIELDTERMINATOR = '';'',
+                ROWTERMINATOR   = ''0x0a'',
+                FIRSTROW        = 2,
+                CODEPAGE        = ''65001'',
+                TABLOCK, KEEPNULLS
+            );';
+        EXEC(@sqlBulk);
 
-        EXEC(@sqlBulk);
+        DECLARE @bulkRows INT = @@ROWCOUNT;
+        IF @bulkRows = 0
+        BEGIN
+            RAISERROR('No se importaron filas desde el CSV. Verifique ruta, separador ; y encabezado.', 16, 1);
+            RETURN;
+        END;
 
-        select * from #TempProveedoresGastoOriginal;
+        -- Limpieza básica
+        UPDATE #TempProveedoresBulk
+        SET
+            tipoGasto = LTRIM(RTRIM(REPLACE(REPLACE(tipoGasto, CHAR(13), ''), NCHAR(65279), ''))),
+            columnaMixta = LTRIM(RTRIM(REPLACE(columnaMixta, CHAR(13), ''))),
+            detalleAlternativo = LTRIM(RTRIM(REPLACE(detalleAlternativo, CHAR(13), ''))),
+            nomConsorcio = LTRIM(RTRIM(REPLACE(REPLACE(nomConsorcio, CHAR(13), ''), NCHAR(65279), '')));
 
-        DECLARE @bulkRows INT = @@ROWCOUNT;
-        IF @bulkRows = 0
-        BEGIN
-            RAISERROR('No se importaron filas desde el CSV. Verifique ruta, separador ; y encabezado.', 16, 1);
-            RETURN;
-        END
+        -- Procesar los datos
+        INSERT INTO #TempProveedoresProc (tipoGastoFull, tipoBase, subTipo, tipoParaBD, nomEmpresa, detalle, nomConsorcio)
+        SELECT
+            tb.tipoGasto,
+            CASE WHEN CHARINDEX('-', tb.tipoGasto) > 0
+                 THEN LTRIM(RTRIM(LEFT(tb.tipoGasto, CHARINDEX('-', tb.tipoGasto)-1)))
+                 ELSE tb.tipoGasto END,
+            CASE WHEN CHARINDEX('-', tb.tipoGasto) > 0
+                 THEN LTRIM(RTRIM(SUBSTRING(tb.tipoGasto, CHARINDEX('-', tb.tipoGasto)+1, 200)))
+                 ELSE NULL END,
+            CASE
+                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS DE ADMINISTRACION' THEN 'ADMINISTRACION'
+                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS BANCARIOS'         THEN 'BANCARIOS'
+                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS DE LIMPIEZA'       THEN 'LIMPIEZA'
+                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'SEGUROS'                   THEN 'SEGUROS'
+                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI LIKE 'SERVICIOS PUBLICOS-AGUA%' THEN 'SERVICIOS PUBLICOS-Agua'
+                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI LIKE 'SERVICIOS PUBLICOS-LUZ%'  THEN 'SERVICIOS PUBLICOS-Luz'
+                ELSE tb.tipoGasto
+            END,
+            CASE WHEN CHARINDEX('-', tb.columnaMixta) > 0
+                 THEN LTRIM(RTRIM(LEFT(tb.columnaMixta, CHARINDEX('-', tb.columnaMixta)-1)))
+                 ELSE LTRIM(RTRIM(tb.columnaMixta)) END,
+            CASE
+                WHEN NULLIF(LTRIM(RTRIM(tb.detalleAlternativo)), '') IS NOT NULL
+                    THEN LTRIM(RTRIM(tb.detalleAlternativo))
+                WHEN CHARINDEX('-', tb.columnaMixta) > 0
+                    THEN LTRIM(RTRIM(SUBSTRING(tb.columnaMixta, CHARINDEX('-', tb.columnaMixta)+1, 400)))
+                ELSE NULL
+            END,
+            tb.nomConsorcio
+        FROM #TempProveedoresBulk tb;
 
-		--normalizar
-        UPDATE #TempProveedoresGastoOriginal
-        SET
-            tipoGasto          = REPLACE(tipoGasto, CHAR(13), ''),
-            columnaMixta       = REPLACE(columnaMixta, CHAR(13), ''),
-            detalleAlternativo = REPLACE(detalleAlternativo, CHAR(13), ''),
-            nomConsorcio       = REPLACE(nomConsorcio, CHAR(13), '');
+        -- Actualizar GastoOrdinario usando consorcioId directamente
+        UPDATE g
+        SET 
+            g.nombreEmpresaoPersona = CASE 
+                WHEN UPPER(pp.tipoBase) = 'SERVICIOS PUBLICOS' AND UPPER(pp.subTipo) = 'AGUA' THEN 'AYSA'
+                WHEN UPPER(pp.tipoBase) = 'SERVICIOS PUBLICOS' AND UPPER(pp.subTipo) = 'LUZ'  THEN 'EDENOR'
+                ELSE pp.nomEmpresa
+            END,
+            g.detalle = pp.detalle
+        FROM Negocio.GastoOrdinario AS g
+        JOIN Consorcio.Consorcio AS c ON c.id = g.consorcioId
+        JOIN #TempProveedoresProc AS pp
+             ON UPPER(LTRIM(RTRIM(g.tipoServicio))) COLLATE Latin1_General_CI_AI
+                = UPPER(LTRIM(RTRIM(pp.tipoParaBD))) COLLATE Latin1_General_CI_AI
+            AND UPPER(LTRIM(RTRIM(c.nombre))) COLLATE Latin1_General_CI_AI
+                = UPPER(LTRIM(RTRIM(pp.nomConsorcio))) COLLATE Latin1_General_CI_AI;
 
-        -- cosas de formato
-        UPDATE #TempProveedoresGastoOriginal
-        SET
-            tipoGasto    = LTRIM(RTRIM(REPLACE(tipoGasto, NCHAR(65279), ''))),
-            columnaMixta = LTRIM(RTRIM(columnaMixta)),
-            detalleAlternativo = LTRIM(RTRIM(detalleAlternativo)),
-            nomConsorcio = LTRIM(RTRIM(nomConsorcio));
+        DECLARE @upd INT = @@ROWCOUNT;
+        PRINT CONCAT('Filas importadas del CSV: ', @bulkRows);
+        PRINT CONCAT('Filas actualizadas en GastoOrdinario: ', @upd);
 
-        --se procesa la tabla
-        --se procesa la tabla
-        INSERT INTO #TempProveedoresGastoProcesado (tipoGasto, nomEmpresa, detalle, nomConsorcio)
-        SELECT 
-            LTRIM(RTRIM(tipoGasto)) AS tipoGasto,
-            
-            -- Lógica para nomEmpresa (Antes del '-' o columnaMixta completa)
-            CASE
-                WHEN CHARINDEX('-', columnaMixta) > 0 
-                    THEN LTRIM(RTRIM(LEFT(columnaMixta, CHARINDEX('-', columnaMixta) - 1)))
-                ELSE LTRIM(RTRIM(columnaMixta))
-            END AS nomEmpresa,
-            
-            -- Lógica CORREGIDA para detalle: DetalleAlternativo tiene prioridad si NO es NULL
-            CASE
-                -- Prioridad 1: Si detalleAlternativo NO es NULL o vacío, úsalo.
-                WHEN LTRIM(RTRIM(detalleAlternativo)) IS NOT NULL AND LTRIM(RTRIM(detalleAlternativo)) <> '' 
-                    THEN LTRIM(RTRIM(detalleAlternativo))
-                -- Prioridad 2: Si no hay detalleAlternativo, usa lo que está después del '-' en columnaMixta.
-                WHEN CHARINDEX('-', columnaMixta) > 0 
-                    THEN LTRIM(RTRIM(SUBSTRING(columnaMixta, CHARINDEX('-', columnaMixta) + 1, 400)))
-                -- Si no aplica nada de lo anterior, es NULL (o cadena vacía)
-                ELSE NULL 
-            END AS detalle,
-            LTRIM(RTRIM(nomConsorcio)) AS nomConsorcio
-        FROM #TempProveedoresGastoOriginal;
+    END TRY
+    BEGIN CATCH
+        PRINT 'Error durante la importación de datos de Proveedores:';
+        PRINT ERROR_MESSAGE();
+    END CATCH;
 
-        -- **** CÓDIGO CORREGIDO Y CON LÓGICA DE NEGOCIO ***
-        -- **** CÓDIGO CORREGIDO Y CON LÓGICA DE NEGOCIO ***
-        UPDATE g
-        SET 
-            g.nombreEmpresaoPersona = 
-                CASE LTRIM(RTRIM(g.tipoServicio))
-                    -- Regla 1: Proveedores específicos de Servicios Públicos
-                    WHEN 'SERVICIOS PUBLICOS-Agua' THEN 'AYSA'
-                    WHEN 'SERVICIOS PUBLICOS-Luz' THEN 'EDENOR'
-                    
-                    
-                    -- Regla 3: Para el resto, usa el nombre del proveedor importado (ya procesado)
-                    ELSE p.nomEmpresa
-                END,
-            g.detalle = p.detalle -- Aquí p.detalle ya contiene la lógica de prioridad de detalleAlternativo
-        
-        FROM Negocio.GastoOrdinario AS g
-        -- La clave sigue siendo unirse correctamente a través del Consorcio ID y tipoServicio
-        JOIN Consorcio.Consorcio c ON c.id = g.consorcioId 
-        JOIN #TempProveedoresGastoProcesado p
-             ON p.tipoGasto    = LTRIM(RTRIM(g.tipoServicio))
-            AND p.nomConsorcio = LTRIM(RTRIM(c.nombre));
+    DROP TABLE IF EXISTS #TempProveedoresBulk;
+    DROP TABLE IF EXISTS #TempProveedoresProc;
+    SET NOCOUNT OFF;
+END;
+GO
 
-        DECLARE @upd INT = @@ROWCOUNT;
-        PRINT CONCAT('Filas importadas del CSV: ', @bulkRows);
-        PRINT CONCAT('Filas actualizadas en GastoOrdinario: ', @upd);
-    END TRY
-    BEGIN CATCH
-        PRINT 'Error durante la importacion de datos de Proveedores:';
-        PRINT ERROR_MESSAGE();
-    END CATCH;
-
-    DROP TABLE IF EXISTS #TempProveedoresGastoProcesado;
-    DROP TABLE IF EXISTS #TempProveedoresGastoOriginal;
-
-
-    SET NOCOUNT OFF;
-END
+IF OBJECT_ID('Operaciones.sp_ImportarDatosProveedores', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarDatosProveedores creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.Proveedores"'
 GO
 
 --===============================================================================================================
+--Importar "Inquilinos-Propietarios-UF"
+--===============================================================================================================
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_CargarUF_Inquilinos
     @RutaArchivo VARCHAR(500)
 AS
@@ -747,7 +754,14 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID('Operaciones.sp_CargarUF_Inquilinos', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_CargarUF_Inquilinos creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.UnidadFuncional"'
+GO
+
 --===============================================================================================================
+--Importar "UF por Consorcio"
+--===============================================================================================================
+
 CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarUFporConsorcio
     @RutaArchivo VARCHAR(500)
 AS
@@ -878,6 +892,10 @@ BEGIN
     PRINT 'Proceso de relleno de campos de Unidades Funcionales finalizado.';
 
 END
+GO
+
+IF OBJECT_ID('Operaciones.sp_ImportarUFporConsorcio', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarUFporConsorcio creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.UnidadFuncional"'
 GO
 
 
