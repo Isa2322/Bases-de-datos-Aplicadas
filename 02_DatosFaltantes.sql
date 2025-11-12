@@ -460,7 +460,7 @@ PRINT 'Stored Procedure: Operaciones.SP_generadorCuentaBancaria creado exitosame
 GO
 
 -- ======================================================================================================
--- Rellenar tabla DETALLE EXPENSA
+-- Rellenar tabla EXPENSA
 -- ======================================================================================================
  
 
