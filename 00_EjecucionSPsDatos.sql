@@ -26,7 +26,7 @@ EXEC Operaciones.sp_CargaTiposRol
 SELECT * FROM Consorcio.TipoRol
 
 EXEC Operaciones.sp_CrearYcargar_FormasDePago
-SELECT * FROM Pago.FormaDePago
+SELECT * FROM Pago.FormaDePago 
 
 EXEC Operaciones.sp_ImportacionPago @rutaArchivo  = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\pagos_consorcios.csv';
 SELECT * FROM Pago.Pago;
@@ -38,13 +38,13 @@ EXEC Operaciones.SP_generadorCuentaBancaria;
 SELECT * FROM Consorcio.CuentaBancaria
 
 EXEC Operaciones.sp_ImportarGastosMensuales @ruta = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Servicios.Servicios.json';
-SELECT * FROM Negocio.GastoOrdinario;
+--SELECT * FROM Negocio.GastoOrdinario;
 
 EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\datos varios - Proveedores.csv';
-SELECT * FROM Negocio.GastoOrdinario;
+--SELECT * FROM Negocio.GastoOrdinario;
 
 EXEC Operaciones.sp_ImportarInquilinosPropietarios @RutaArchivo = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-datos.csv';
-SELECT * FROM Consorcio.Persona;
+--SELECT * FROM Consorcio.Persona;
 
 EXEC Operaciones.sp_CargarUF_Inquilinos @RutaArchivo = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-UF.csv';
 SELECT * FROM Consorcio.Persona
@@ -53,11 +53,16 @@ EXEC Operaciones.sp_ImportarUFporConsorcio @RutaArchivo = 'C:\Users\Milagros qui
 SELECT * FROM Consorcio.UnidadFuncional
 
 EXEC Operaciones.sp_CargarGastosExtraordinarios
-SELECT * FROM Negocio.GastoExtraordinario
+--SELECT * FROM Negocio.GastoExtraordinario
 
 --Los parametros de esta ejecucion deben cambiar segun lo q se quiera generar
 EXEC Negocio.SP_GenerarLoteDeExpensas
+EXEC Operaciones.sp_AplicarPagosACuentas;
+select * from Negocio.Expensa;
 SELECT * FROM Negocio.DetalleExpensa
+select * from Pago.PagoAplicado;
+SELECT * FROM Negocio.GastoOrdinario;
+SELECT * FROM Negocio.GastoExtraordinario
 
 EXEC Operaciones.sp_RellenarCocheras
 SELECT * FROM Consorcio.Cochera
@@ -65,6 +70,7 @@ SELECT * FROM Consorcio.Cochera
 EXEC Operaciones.sp_RellenarBauleras
 SELECT * FROM Consorcio.Baulera
 
+/*
 
 --Reporte 1
 EXEC Reporte.sp_Reporte1_FlujoSemanal 1,2025,5
@@ -88,3 +94,4 @@ EXEC Reporte.sp_Reporte5_MayoresMorosos_XML 1,'2025-05-01'
 --Reporte 6
 --Puede filtrar por Consocio, Unidad Funcional y periodo(usando 2 fechas)
 EXEC Reporte.sp_Reporte6_PagosOrdinarios_XML
+*/
