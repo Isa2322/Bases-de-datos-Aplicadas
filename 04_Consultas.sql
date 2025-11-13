@@ -7,11 +7,11 @@ GO
     Debe presentar la recaudación por pagos ordinarios y extraordinarios de cada semana, el promedio en el periodo, y el acumulado progresivo. 
 */
 
-IF OBJECT_ID('Operaciones.sp_Reporte1_FlujoSemanal', 'P') IS NOT NULL
-    DROP PROCEDURE Operaciones.sp_Reporte1_FlujoSemanal
+IF OBJECT_ID('Reporte.sp_Reporte1_FlujoSemanal', 'P') IS NOT NULL
+    DROP PROCEDURE Reporte.sp_Reporte1_FlujoSemanal
 GO
 
-CREATE PROCEDURE Operaciones.sp_Reporte1_FlujoSemanal
+CREATE PROCEDURE Reporte.sp_Reporte1_FlujoSemanal
 (
     @NombreConsorcio VARCHAR(100),
     @PeriodoAnio INT,
@@ -119,11 +119,11 @@ GO
 
 */
 
-IF OBJECT_ID('Operaciones.sp_Reporte2_RecaudacionMesDepto', 'P') IS NOT NULL
-    DROP PROCEDURE Operaciones.sp_Reporte2_RecaudacionMesDepto
+IF OBJECT_ID('Reporte.sp_Reporte2_RecaudacionMesDepto', 'P') IS NOT NULL
+    DROP PROCEDURE Reporte.sp_Reporte2_RecaudacionMesDepto
 GO
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte2_RecaudacionMesDepto
+CREATE OR ALTER PROCEDURE Reporte.sp_Reporte2_RecaudacionMesDepto
     @idConsorcio INT,   
     @anio INT,    
     @incluirSinPagos BIT = 0 
@@ -199,11 +199,11 @@ GO
     Presente un cuadro cruzado con la recaudación total desagregada según su procedencia (ordinario, extraordinario, etc.) según el periodo. 
 */
 
-IF OBJECT_ID('Operaciones.sp_Reporte3_RecaudacionPorProcedencia', 'P') IS NOT NULL
-    DROP PROCEDURE Operaciones.sp_Reporte3_RecaudacionPorProcedencia
+IF OBJECT_ID('Reporte.sp_Reporte3_RecaudacionPorProcedencia', 'P') IS NOT NULL
+    DROP PROCEDURE Reporte.sp_Reporte3_RecaudacionPorProcedencia
 GO
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte3_RecaudacionPorProcedencia
+CREATE OR ALTER PROCEDURE Reporte.sp_Reporte3_RecaudacionPorProcedencia
     @idConsorcio INT = NULL, 
     @fechaDesde  DATE = NULL, 
     @fechaHasta  DATE = NULL 
@@ -281,8 +281,11 @@ GO
     REPORTE 4:
     Obtenga los 5 (cinco) meses de mayores gastos y los 5 (cinco) de mayores ingresos.  
 */
+IF OBJECT_ID('Reporte.SP_ObtenerTopNMesesGastosIngresos', 'P') IS NOT NULL
+    DROP PROCEDURE Reporte.SP_ObtenerTopNMesesGastosIngresos
+GO
 
-CREATE PROCEDURE Negocio.SP_ObtenerTopNMesesGastosIngresos
+CREATE PROCEDURE Reporte.SP_ObtenerTopNMesesGastosIngresos
     @TopN INT = 5,
     @Anio INT = NULL,
     @ConsorcioID INT = NULL
@@ -396,11 +399,11 @@ GO
     contactar o remitir el trámite al estudio jurídico.
     CON XML
 */
-IF OBJECT_ID('Operaciones.sp_Reporte5_MayoresMorosos_XML', 'P') IS NOT NULL
-    DROP PROCEDURE Operaciones.sp_Reporte5_MayoresMorosos_XML
+IF OBJECT_ID('Reporte.sp_Reporte5_MayoresMorosos_XML', 'P') IS NOT NULL
+    DROP PROCEDURE Reporte.sp_Reporte5_MayoresMorosos_XML
 GO
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte5_MayoresMorosos_XML
+CREATE OR ALTER PROCEDURE Reporte.sp_Reporte5_MayoresMorosos_XML
     @idConsorcio INT,
     @fechaDesde  DATE,
     @fechaHasta  DATE = NULL
@@ -468,11 +471,11 @@ GO
     para el conjunto examinado. 
     CON XML
 */
-IF OBJECT_ID('Operaciones.sp_Reporte6_PagosOrdinarios_XML', 'P') IS NOT NULL
-    DROP PROCEDURE Operaciones.sp_Reporte6_PagosOrdinarios_XML
+IF OBJECT_ID('Reporte.sp_Reporte6_PagosOrdinarios_XML', 'P') IS NOT NULL
+    DROP PROCEDURE Reporte.sp_Reporte6_PagosOrdinarios_XML
 GO
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte6_PagosOrdinarios_XML
+CREATE OR ALTER PROCEDURE Reporte.sp_Reporte6_PagosOrdinarios_XML
     @idConsorcio INT      = NULL,   -- filtra por consorcio si viene
     @idUF        INT      = NULL,   -- filtra por unidad funcional si viene
     @fechaDesde  DATE     = NULL,   -- incluye pagos desde esta fecha (por fecha de Pago)

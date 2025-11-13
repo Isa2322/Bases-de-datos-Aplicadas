@@ -80,6 +80,17 @@ BEGIN
 END
 GO
 
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Reporte')
+BEGIN
+    EXEC('CREATE SCHEMA Reporte');
+    PRINT N'schema "Reporte" no existia: se creo correctamente.';
+END
+ELSE
+BEGIN
+    PRINT N'schema "Reporte" ya existe: no se creo nada.';
+END
+GO
+
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'Negocio')
 BEGIN
     EXEC('CREATE SCHEMA Negocio');
