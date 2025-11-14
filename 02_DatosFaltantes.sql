@@ -815,197 +815,6 @@ END
 GO
 
 
-
-
--- Tienen que haberse generado las expensas y aplicarlos pagos antes de correr este SP (En ese orden)
-CREATE OR ALTER PROCEDURE Operaciones.ActualizarDetalleExpensa
-    @expensaId INT,
-    @mail BIT = 0
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    BEGIN TRY
-        BEGIN TRANSACTION;
-
-        DECLARE @expensaAnterior INT = @expensaId -1;
-
-        -- 1. Actualizar saldoAnteriorAbonado con el pagoRecibido de la expensa anterior
-            WITH
-        ExpensaAnterior
-        AS
-        (
-            SELECT
-                de.idUnidadFuncional,
-                de.expensaId,
-                de.pagosRecibidos
-            FROM Negocio.DetalleExpensa de
-            WHERE de.expensaId = @expensaAnterior
-        )
-
-        UPDATE de_actual
-        SET saldoAnteriorAbonado = ISNULL(ea.pagosRecibidos, 0)
-        FROM Negocio.DetalleExpensa de_actual
-        JOIN ExpensaAnterior ea on ea.expensaId + 1 = de_actual.expensaId
-        WHERE de_actual.expensaId = @expensaId
-        AND ea.expensaId = @expensaAnterior
-        AND ea.idUnidadFuncional = de_actual.idUnidadFuncional;
-
-        -- 2. Calcular pagosRecibidos por unidad funcional y expensa
-
-        WITH
-        PagosAgrupados
-        AS
-        (
-            SELECT
-                uf.id AS idUnidadFuncional,
-                de.id AS idDetalleExpensa,
-                de.expensaId,
-                SUM(pa.importeAplicado) AS totalPagos
-            FROM Pago.PagoAplicado pa
-                INNER JOIN Negocio.DetalleExpensa de ON pa.idDetalleExpensa = de.id
-                INNER JOIN Consorcio.UnidadFuncional uf ON de.idUnidadFuncional = uf.id
-                INNER JOIN Consorcio.Consorcio c ON uf.consorcioId = c.id
-                JOIN Pago.Pago p ON p.id = pa.idPago
-            WHERE de.expensaId = @expensaId
-            GROUP BY uf.id, de.id, de.expensaId
-        )
-        UPDATE de
-        SET pagosRecibidos = ISNULL(pa.totalPagos, 0)
-        FROM Negocio.DetalleExpensa de
-        JOIN PagosAgrupados pa ON pa.expensaId = de.expensaId
-        WHERE de.id = pa.idDetalleExpensa;
-
-
-        -- 3. Calcular interés por mora basado en fecha de pago
-
-        WITH
-        PrimerPagoPorDetalle
-        AS
-        (
-            SELECT
-                pa.idDetalleExpensa,
-                MIN(p.fecha) as primeraFechaPago
-            FROM Pago.PagoAplicado pa
-                INNER JOIN Pago.Pago p ON pa.idPago = p.id
-                INNER JOIN Negocio.DetalleExpensa de ON pa.idDetalleExpensa = de.id
-                INNER JOIN Negocio.Expensa e ON de.expensaId = e.id
-            WHERE e.id = expensaId
-            GROUP BY pa.idDetalleExpensa
-        )
-        UPDATE de
-        SET interesMora = 
-            CASE 
-                WHEN pp.primeraFechaPago > de.segundoVencimiento THEN
-                    (de.totalaPagar - de.saldoAnteriorAbonado) * 0.05  -- 5% después del 2do vto
-                WHEN pp.primeraFechaPago > de.primerVencimiento AND pp.primeraFechaPago <= de.segundoVencimiento THEN
-                    (de.totalaPagar - de.saldoAnteriorAbonado) * 0.02  -- 2% entre 1er y 2do vto
-                ELSE 0  -- Sin interés si paga antes del 1er vencimiento
-            END
-        FROM Negocio.DetalleExpensa de
-        INNER JOIN Negocio.Expensa e ON de.expensaId = e.id
-        LEFT JOIN PrimerPagoPorDetalle pp ON de.id = pp.idDetalleExpensa
-        WHERE de.expensaId = @expensaId
-        AND pp.primeraFechaPago IS NOT NULL;  -- Solo donde hay pagos
-
-        -- 4. Si no hay pagos, interés mora = 0
-        UPDATE de
-        SET interesMora = 0
-        FROM Negocio.DetalleExpensa de
-        INNER JOIN Negocio.Expensa e ON de.expensaId = e.id
-        WHERE de.expensaId = @expensaId
-        AND interesMora IS NULL;
-
-        IF @mail = 1
-        BEGIN
-        EXEC Negocio.SP_EnviarMailPorExpensa @expensaId
-    END
-
-        COMMIT TRANSACTION;
-
-        PRINT 'Actualización completada exitosamente para la exepensa: ' + CAST(@expensaId AS VARCHAR);
-        
-    END TRY
-    BEGIN CATCH
-        IF @@TRANCOUNT > 0
-            ROLLBACK TRANSACTION;
-        
-        DECLARE @ErrorMessage VARCHAR(4000) = ERROR_MESSAGE();
-        DECLARE @ErrorSeverity INT = ERROR_SEVERITY();
-        DECLARE @ErrorState INT = ERROR_STATE();
-        
-        RAISERROR(@ErrorMessage, @ErrorSeverity, @ErrorState);
-    END CATCH
-END;
-GO
-
-
-
--- SP para automatizar la generación de expensas mensuales en lote
--- Genera las expensas, aplica los pagos y actualiza los detalles de expensa (en ese orden)
-CREATE OR ALTER PROCEDURE Negocio.SP_GenerarLoteDeExpensas
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    -- --- Parámetros del Lote ---
-    DECLARE @ConsorcioDesde INT = 1;
-    DECLARE @ConsorcioHasta INT = 5;
-
-    DECLARE @MesDesde INT = 3;
-    DECLARE @MesHasta INT = 6;
-
-    DECLARE @AnioFijo INT = 2025;
-    -- ---------------------------
-
-    DECLARE @ConsorcioActual INT = @ConsorcioDesde;
-    DECLARE @MesActual INT;
-    DECLARE @ContadorExpensas INT = 1;
-
-    PRINT 'Iniciando la generación en lote de expensas...';
-    PRINT '-----------------------------------------------';
-
-    -- Loop 1: Itera por cada Consorcio
-    WHILE @ConsorcioActual <= @ConsorcioHasta
-    BEGIN
-
-        -- Resetea el contador de mes para cada consorcio
-        SET @MesActual = @MesDesde;
-
-        -- Loop 2: Itera por cada Mes
-        WHILE @MesActual <= @MesHasta
-        BEGIN
-
-            PRINT 'Ejecutando: Consorcio ' + CAST(@ConsorcioActual AS VARCHAR) + 
-                  ', Período: ' + CAST(@AnioFijo AS VARCHAR) + '-' + FORMAT(@MesActual, '00');
-
-            -- Ejecuta el SP principal con los valores actuales del loop
-            EXEC Negocio.SP_GenerarExpensasMensuales 
-                @ConsorcioID = @ConsorcioActual, 
-                @Anio = @AnioFijo, 
-                @Mes = @MesActual;
-
-            EXEC Operaciones.sp_AplicarPagosACuentas
-
-            EXEC Operaciones.ActualizarDetalleExpensa @ContadorExpensas
-
-            -- Incrementa el mes
-            SET @MesActual = @MesActual + 1;
-            SET @ContadorExpensas = @ContadorExpensas + 1
-        END
-
-        PRINT '--- Consorcio ' + CAST(@ConsorcioActual AS VARCHAR) + ' completado ---';
-
-        -- Incrementa el consorcio
-        SET @ConsorcioActual = @ConsorcioActual + 1;
-    END
-
-    PRINT '-----------------------------------------------';
-    PRINT 'Generación en lote finalizada.';
-
-END
-GO
-
 CREATE OR ALTER PROCEDURE Negocio.SP_EnviarMailPorExpensa
     @expensaId INT
 AS
@@ -1223,6 +1032,197 @@ BEGIN
 
         SET @indice = @indice + 1;
     END
+
+END
+GO
+		
+
+
+-- Tienen que haberse generado las expensas y aplicarlos pagos antes de correr este SP (En ese orden)
+CREATE OR ALTER PROCEDURE Operaciones.ActualizarDetalleExpensa
+    @expensaId INT,
+    @mail BIT = 0
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+        DECLARE @expensaAnterior INT = @expensaId -1;
+
+        -- 1. Actualizar saldoAnteriorAbonado con el pagoRecibido de la expensa anterior
+            WITH
+        ExpensaAnterior
+        AS
+        (
+            SELECT
+                de.idUnidadFuncional,
+                de.expensaId,
+                de.pagosRecibidos
+            FROM Negocio.DetalleExpensa de
+            WHERE de.expensaId = @expensaAnterior
+        )
+
+        UPDATE de_actual
+        SET saldoAnteriorAbonado = ISNULL(ea.pagosRecibidos, 0)
+        FROM Negocio.DetalleExpensa de_actual
+        JOIN ExpensaAnterior ea on ea.expensaId + 1 = de_actual.expensaId
+        WHERE de_actual.expensaId = @expensaId
+        AND ea.expensaId = @expensaAnterior
+        AND ea.idUnidadFuncional = de_actual.idUnidadFuncional;
+
+        -- 2. Calcular pagosRecibidos por unidad funcional y expensa
+
+        WITH
+        PagosAgrupados
+        AS
+        (
+            SELECT
+                uf.id AS idUnidadFuncional,
+                de.id AS idDetalleExpensa,
+                de.expensaId,
+                SUM(pa.importeAplicado) AS totalPagos
+            FROM Pago.PagoAplicado pa
+                INNER JOIN Negocio.DetalleExpensa de ON pa.idDetalleExpensa = de.id
+                INNER JOIN Consorcio.UnidadFuncional uf ON de.idUnidadFuncional = uf.id
+                INNER JOIN Consorcio.Consorcio c ON uf.consorcioId = c.id
+                JOIN Pago.Pago p ON p.id = pa.idPago
+            WHERE de.expensaId = @expensaId
+            GROUP BY uf.id, de.id, de.expensaId
+        )
+        UPDATE de
+        SET pagosRecibidos = ISNULL(pa.totalPagos, 0)
+        FROM Negocio.DetalleExpensa de
+        JOIN PagosAgrupados pa ON pa.expensaId = de.expensaId
+        WHERE de.id = pa.idDetalleExpensa;
+
+
+        -- 3. Calcular interés por mora basado en fecha de pago
+
+        WITH
+        PrimerPagoPorDetalle
+        AS
+        (
+            SELECT
+                pa.idDetalleExpensa,
+                MIN(p.fecha) as primeraFechaPago
+            FROM Pago.PagoAplicado pa
+                INNER JOIN Pago.Pago p ON pa.idPago = p.id
+                INNER JOIN Negocio.DetalleExpensa de ON pa.idDetalleExpensa = de.id
+                INNER JOIN Negocio.Expensa e ON de.expensaId = e.id
+            WHERE e.id = expensaId
+            GROUP BY pa.idDetalleExpensa
+        )
+        UPDATE de
+        SET interesMora = 
+            CASE 
+                WHEN pp.primeraFechaPago > de.segundoVencimiento THEN
+                    (de.totalaPagar - de.saldoAnteriorAbonado) * 0.05  -- 5% después del 2do vto
+                WHEN pp.primeraFechaPago > de.primerVencimiento AND pp.primeraFechaPago <= de.segundoVencimiento THEN
+                    (de.totalaPagar - de.saldoAnteriorAbonado) * 0.02  -- 2% entre 1er y 2do vto
+                ELSE 0  -- Sin interés si paga antes del 1er vencimiento
+            END
+        FROM Negocio.DetalleExpensa de
+        INNER JOIN Negocio.Expensa e ON de.expensaId = e.id
+        LEFT JOIN PrimerPagoPorDetalle pp ON de.id = pp.idDetalleExpensa
+        WHERE de.expensaId = @expensaId
+        AND pp.primeraFechaPago IS NOT NULL;  -- Solo donde hay pagos
+
+        -- 4. Si no hay pagos, interés mora = 0
+        UPDATE de
+        SET interesMora = 0
+        FROM Negocio.DetalleExpensa de
+        INNER JOIN Negocio.Expensa e ON de.expensaId = e.id
+        WHERE de.expensaId = @expensaId
+        AND interesMora IS NULL;
+
+        IF @mail = 1
+        BEGIN
+        	EXEC Negocio.SP_EnviarMailPorExpensa @expensaId
+   		END
+
+        COMMIT TRANSACTION;
+
+        PRINT 'Actualización completada exitosamente para la exepensa: ' + CAST(@expensaId AS VARCHAR);
+        
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0
+            ROLLBACK TRANSACTION;
+        
+        DECLARE @ErrorMessage VARCHAR(4000) = ERROR_MESSAGE();
+        DECLARE @ErrorSeverity INT = ERROR_SEVERITY();
+        DECLARE @ErrorState INT = ERROR_STATE();
+        
+        RAISERROR(@ErrorMessage, @ErrorSeverity, @ErrorState);
+    END CATCH
+END;
+GO
+
+
+
+-- SP para automatizar la generación de expensas mensuales en lote
+-- Genera las expensas, aplica los pagos y actualiza los detalles de expensa (en ese orden)
+CREATE OR ALTER PROCEDURE Negocio.SP_GenerarLoteDeExpensas
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- --- Parámetros del Lote ---
+    DECLARE @ConsorcioDesde INT = 1;
+    DECLARE @ConsorcioHasta INT = 5;
+
+    DECLARE @MesDesde INT = 3;
+    DECLARE @MesHasta INT = 6;
+
+    DECLARE @AnioFijo INT = 2025;
+    -- ---------------------------
+
+    DECLARE @ConsorcioActual INT = @ConsorcioDesde;
+    DECLARE @MesActual INT;
+    DECLARE @ContadorExpensas INT = 1;
+
+    PRINT 'Iniciando la generación en lote de expensas...';
+    PRINT '-----------------------------------------------';
+
+    -- Loop 1: Itera por cada Consorcio
+    WHILE @ConsorcioActual <= @ConsorcioHasta
+    BEGIN
+
+        -- Resetea el contador de mes para cada consorcio
+        SET @MesActual = @MesDesde;
+
+        -- Loop 2: Itera por cada Mes
+        WHILE @MesActual <= @MesHasta
+        BEGIN
+
+            PRINT 'Ejecutando: Consorcio ' + CAST(@ConsorcioActual AS VARCHAR) + 
+                  ', Período: ' + CAST(@AnioFijo AS VARCHAR) + '-' + FORMAT(@MesActual, '00');
+
+            -- Ejecuta el SP principal con los valores actuales del loop
+            EXEC Negocio.SP_GenerarExpensasMensuales 
+                @ConsorcioID = @ConsorcioActual, 
+                @Anio = @AnioFijo, 
+                @Mes = @MesActual;
+
+            EXEC Operaciones.sp_AplicarPagosACuentas
+
+            EXEC Operaciones.ActualizarDetalleExpensa @ContadorExpensas
+
+            -- Incrementa el mes
+            SET @MesActual = @MesActual + 1;
+            SET @ContadorExpensas = @ContadorExpensas + 1
+        END
+
+        PRINT '--- Consorcio ' + CAST(@ConsorcioActual AS VARCHAR) + ' completado ---';
+
+        -- Incrementa el consorcio
+        SET @ConsorcioActual = @ConsorcioActual + 1;
+    END
+
+    PRINT '-----------------------------------------------';
+    PRINT 'Generación en lote finalizada.';
 
 END
 GO
