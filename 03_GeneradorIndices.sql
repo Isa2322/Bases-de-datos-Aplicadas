@@ -3,7 +3,7 @@
 -- USO LA BASE DEL TP
 USE [Com5600G11]
 GO
-
+ 
 -- Búsquedas frecuentes por nombre (joins desde staging/archivos)
 IF NOT EXISTS (SELECT 1 FROM sys.indexes 
                WHERE name = 'IX_Consorcio_nombre' 

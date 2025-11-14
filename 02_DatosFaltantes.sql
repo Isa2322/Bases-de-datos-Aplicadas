@@ -16,6 +16,40 @@ USE [Com5600G11];
 GO
 
 --======================================================================================================
+-- Rellenar tabla Gatos Ordinarios (gastos generales)
+--======================================================================================================
+
+CREATE OR ALTER PROCEDURE Operaciones.CargarGastosGeneralesOrdinarios
+as
+begin
+    UPDATE GA
+        SET
+            GA.nombreEmpresaoPersona = ISNULL(GA.nombreEmpresaoPersona,
+            CHOOSE(ABS(CHECKSUM(NEWID())) % 5 + 1,
+                'Fumigadora La Rápida',
+                'Iluminación LED S.A.',
+                'Llaves Express',
+                'Servicios de Mantenimiento Integral',
+                'Piscinas del Sur'
+            )),
+        -- Asigna el detalle aleatorio
+        GA.detalle = isnull(GA.detalle ,
+            CHOOSE(ABS(CHECKSUM(NEWID())) % 6 + 1,
+                'Reposición de lámparas LED',
+                'Duplicado de llaves',
+                'Fumigación mensual',
+                'Mantenimiento de extinguidores',
+                'Limpieza de tanque de agua',
+                'Mantenimiento de jardines'
+            ))
+        FROM Negocio.GastoOrdinario GA
+        WHERE UPPER(GA.tipoServicio) = 'GASTOS GENERALES'
+          AND (NULLIF(LTRIM(RTRIM(GA.detalle)), '') IS NULL or NULLIF(LTRIM(RTRIM(GA.nombreEmpresaoPersona)), '') IS NULL );
+
+end
+go
+
+--======================================================================================================
 -- Rellenar tabla TIPO DE ROL
 --======================================================================================================
 
@@ -311,8 +345,13 @@ BEGIN
     WHILE @i <= @total
     BEGIN
         -- Elegimos un consorcio y expensa existente
-        SET @consorcioId = (SELECT TOP 1 id FROM Consorcio.Consorcio ORDER BY NEWID());
-        SET @idExpensa = (SELECT TOP 1 id FROM Negocio.Expensa ORDER BY NEWID());
+        SELECT TOP 1 
+                @idExpensa = e.id,
+                @consorcioId = e.consorcioId
+            FROM 
+                Negocio.Expensa AS e
+            ORDER BY 
+                NEWID();
 
         -- Descripciones aleatorias
         DECLARE @detalles TABLE (detalle NVARCHAR(200));
@@ -356,10 +395,10 @@ BEGIN
              @fechaEmision, @importeTotal, @detalle, @esPagoTotal, @nroCuota, @totalCuota);
 
         SET @i += 1;
-    END;
+    END
 
     PRINT N'Carga de gastos extraordinarios completada.';
-END;
+END
 GO
 
 IF OBJECT_ID('Operaciones.sp_CargarGastosExtraordinarios', 'P') IS NOT NULL

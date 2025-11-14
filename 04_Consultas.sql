@@ -7,11 +7,11 @@ GO
     Debe presentar la recaudación por pagos ordinarios y extraordinarios de cada semana, el promedio en el periodo, y el acumulado progresivo. 
 */
 
-IF OBJECT_ID('Operaciones.sp_Reporte1_FlujoSemanal', 'P') IS NOT NULL
-    DROP PROCEDURE Operaciones.sp_Reporte1_FlujoSemanal
+IF OBJECT_ID('Reporte.sp_Reporte1_FlujoSemanal', 'P') IS NOT NULL
+    DROP PROCEDURE Reporte.sp_Reporte1_FlujoSemanal
 GO
 
-CREATE PROCEDURE Operaciones.sp_Reporte1_FlujoSemanal
+CREATE PROCEDURE Reporte.sp_Reporte1_FlujoSemanal
 (
     @NombreConsorcio VARCHAR(100),
     @PeriodoAnio INT,
@@ -49,7 +49,7 @@ BEGIN
     END;
 
     -- 3. Inicia la l�gica de CTE
-    ; WITH EgresosCombinados AS ( 
+     WITH EgresosCombinados AS ( 
         -- Ordinarios
         SELECT
             fechaEmision,
@@ -119,11 +119,11 @@ GO
 
 */
 
-IF OBJECT_ID('Operaciones.sp_Reporte2_RecaudacionMesDepto', 'P') IS NOT NULL
-    DROP PROCEDURE Operaciones.sp_Reporte2_RecaudacionMesDepto
+IF OBJECT_ID('Reporte.sp_Reporte2_RecaudacionMesDepto', 'P') IS NOT NULL
+    DROP PROCEDURE Reporte.sp_Reporte2_RecaudacionMesDepto
 GO
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte2_RecaudacionMesDepto
+CREATE OR ALTER PROCEDURE Reporte.sp_Reporte2_RecaudacionMesDepto
     @idConsorcio INT,   
     @anio INT,    
     @incluirSinPagos BIT = 0 
@@ -151,54 +151,44 @@ BEGIN
         GROUP BY uf.departamento, MONTH(p.fecha)
     ),
     -- Si se pide incluir UFs sin pagos, generamos todas las combinaciones depto x mes con 0
-    DeptoMes AS
-    (
-        SELECT DISTINCT uf.departamento
-        FROM Consorcio.UnidadFuncional uf
-        WHERE uf.consorcioId = @idConsorcio
-    ),
-    CalendarioMes AS
-    (
-        SELECT 1 AS mes UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
-        UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8
-        UNION ALL SELECT 9 UNION ALL SELECT 10 UNION ALL SELECT 11 UNION ALL SELECT 12
-    ),
     Base AS
     (
-        SELECT 
-            COALESCE(r.departamento, d.departamento) AS departamento,
-            m.mes,
-            COALESCE(r.importe, 0) AS importe
-        FROM (
-            SELECT * FROM Recaudacion
-            UNION ALL
-            SELECT NULL, NULL, NULL  -- si @incluirSinPagos=0, ignoraremos esta rama
-        ) r
-        RIGHT JOIN (SELECT * FROM DeptoMes CROSS JOIN CalendarioMes) x
-            ON (@incluirSinPagos = 1) 
-           AND r.departamento = x.departamento 
-           AND r.mes = x.mes
-        RIGHT JOIN DeptoMes d ON d.departamento = COALESCE(x.departamento, r.departamento)
-        RIGHT JOIN CalendarioMes m ON m.mes = COALESCE(x.mes, r.mes)
-        WHERE (@incluirSinPagos = 1) OR (r.departamento IS NOT NULL)
-    )
-    SELECT 
-        departamento,
-        SUM(CASE WHEN mes = 1  THEN importe ELSE 0 END) AS Ene,
-        SUM(CASE WHEN mes = 2  THEN importe ELSE 0 END) AS Feb,
-        SUM(CASE WHEN mes = 3  THEN importe ELSE 0 END) AS Mar,
-        SUM(CASE WHEN mes = 4  THEN importe ELSE 0 END) AS Abr,
-        SUM(CASE WHEN mes = 5  THEN importe ELSE 0 END) AS May,
-        SUM(CASE WHEN mes = 6  THEN importe ELSE 0 END) AS Jun,
-        SUM(CASE WHEN mes = 7  THEN importe ELSE 0 END) AS Jul,
-        SUM(CASE WHEN mes = 8  THEN importe ELSE 0 END) AS Ago,
-        SUM(CASE WHEN mes = 9  THEN importe ELSE 0 END) AS Sep,
-        SUM(CASE WHEN mes = 10 THEN importe ELSE 0 END) AS Oct,
-        SUM(CASE WHEN mes = 11 THEN importe ELSE 0 END) AS Nov,
-        SUM(CASE WHEN mes = 12 THEN importe ELSE 0 END) AS Dic,
-        SUM(importe) AS Total
-    FROM Base
-    GROUP BY departamento
+		SELECT 
+			uf.departamento,
+			r.mes,
+			COALESCE(r.importe,0) AS importe
+			FROM Consorcio.UnidadFuncional uf
+			LEFT JOIN Recaudacion r ON r.departamento =uf.departamento
+			WHERE uf.consorcioId=@idConsorcio
+			AND(
+			@incluirSinPagos=1 OR 
+			uf.departamento IN (SELECT DISTINCT departamento FROM Recaudacion )
+			)
+	)
+	SELECT departamento,
+		ISNULL([1],0) AS Ene,
+		ISNULL([2],0) AS Feb,
+		ISNULL([3],0) AS Mar,
+		ISNULL([4],0) AS Abr,
+		ISNULL([5],0) AS May,
+		ISNULL([6],0) AS Jun,
+		ISNULL([7],0) AS Jul,
+		ISNULL([8],0) AS Ago,
+		ISNULL([9],0) AS Sep,
+		ISNULL([10],0) AS Oct,
+		ISNULL([11],0) AS Nov,
+		ISNULL([12],0) AS Dic,
+		ISNULL([1],0)+ISNULL([2],0)+ISNULL([3],0)+ISNULL([4],0)+
+		ISNULL([5],0)+ISNULL([6],0)+ISNULL([7],0)+ISNULL([8],0)+
+		ISNULL([9],0)+ISNULL([10],0)+ISNULL([11],0)+ISNULL([12],0) AS Total
+	FROM(
+		SELECT departamento,mes,importe
+		FROM Base
+		)AS a
+		PIVOT(sum(importe) FOR mes IN 
+		([1],[2],[3],[4],[5],[6],
+		[7],[8],[9],[10],[11],[12])
+		) AS p
     ORDER BY departamento;
 END
 GO
@@ -209,11 +199,11 @@ GO
     Presente un cuadro cruzado con la recaudación total desagregada según su procedencia (ordinario, extraordinario, etc.) según el periodo. 
 */
 
-IF OBJECT_ID('Operaciones.sp_Reporte3_RecaudacionPorProcedencia', 'P') IS NOT NULL
-    DROP PROCEDURE Operaciones.sp_Reporte3_RecaudacionPorProcedencia
+IF OBJECT_ID('Reporte.sp_Reporte3_RecaudacionPorProcedencia', 'P') IS NOT NULL
+    DROP PROCEDURE Reporte.sp_Reporte3_RecaudacionPorProcedencia
 GO
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte3_RecaudacionPorProcedencia
+CREATE OR ALTER PROCEDURE Reporte.sp_Reporte3_RecaudacionPorProcedencia
     @idConsorcio INT = NULL, 
     @fechaDesde  DATE = NULL, 
     @fechaHasta  DATE = NULL 
@@ -291,8 +281,11 @@ GO
     REPORTE 4:
     Obtenga los 5 (cinco) meses de mayores gastos y los 5 (cinco) de mayores ingresos.  
 */
+IF OBJECT_ID('Reporte.SP_ObtenerTopNMesesGastosIngresos', 'P') IS NOT NULL
+    DROP PROCEDURE Reporte.SP_ObtenerTopNMesesGastosIngresos
+GO
 
-CREATE PROCEDURE Negocio.SP_ObtenerTopNMesesGastosIngresos
+CREATE PROCEDURE Reporte.SP_ObtenerTopNMesesGastosIngresos
     @TopN INT = 5,
     @Anio INT = NULL,
     @ConsorcioID INT = NULL
@@ -406,11 +399,11 @@ GO
     contactar o remitir el trámite al estudio jurídico.
     CON XML
 */
-IF OBJECT_ID('Operaciones.sp_Reporte5_MayoresMorosos_XML', 'P') IS NOT NULL
-    DROP PROCEDURE Operaciones.sp_Reporte5_MayoresMorosos_XML
+IF OBJECT_ID('Reporte.sp_Reporte5_MayoresMorosos_XML', 'P') IS NOT NULL
+    DROP PROCEDURE Reporte.sp_Reporte5_MayoresMorosos_XML
 GO
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte5_MayoresMorosos_XML
+CREATE OR ALTER PROCEDURE Reporte.sp_Reporte5_MayoresMorosos_XML
     @idConsorcio INT,
     @fechaDesde  DATE,
     @fechaHasta  DATE = NULL
@@ -478,11 +471,11 @@ GO
     para el conjunto examinado. 
     CON XML
 */
-IF OBJECT_ID('Operaciones.sp_Reporte6_PagosOrdinarios_XML', 'P') IS NOT NULL
-    DROP PROCEDURE Operaciones.sp_Reporte6_PagosOrdinarios_XML
+IF OBJECT_ID('Reporte.sp_Reporte6_PagosOrdinarios_XML', 'P') IS NOT NULL
+    DROP PROCEDURE Reporte.sp_Reporte6_PagosOrdinarios_XML
 GO
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_Reporte6_PagosOrdinarios_XML
+CREATE OR ALTER PROCEDURE Reporte.sp_Reporte6_PagosOrdinarios_XML
     @idConsorcio INT      = NULL,   -- filtra por consorcio si viene
     @idUF        INT      = NULL,   -- filtra por unidad funcional si viene
     @fechaDesde  DATE     = NULL,   -- incluye pagos desde esta fecha (por fecha de Pago)
