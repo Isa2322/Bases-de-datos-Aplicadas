@@ -22,65 +22,111 @@ Pastori, Ximena - 42300128
 USE [Com5600G11]; 
 GO
 
+--=============================================================================================================================
+-- Seguir las ejecuciones en el orden en que fueron declaradas.
+-- Antes de ejecutar los SPs de importacion del archivo de "datos varios" asegurarse de que el mismo se haya convertido a CSV.
+--=============================================================================================================================
+
 EXEC Operaciones.sp_CargaTiposRol
+GO
 SELECT * FROM Consorcio.TipoRol
 
 EXEC Operaciones.sp_CrearYcargar_FormasDePago
+GO
 SELECT * FROM Pago.FormaDePago 
 
 EXEC Operaciones.sp_ImportarPago @rutaArchivo  = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\pagos_consorcios.csv';
+GO
 SELECT * FROM Pago.Pago;
 
-EXEC Operaciones.sp_ImportarDatosConsorcios @rutaArch= 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\datos varios - Consorcios.csv';
-
+EXEC Operaciones.sp_ImportarDatosConsorcios @rutaArch= 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\datos varios - Consorcios.csv';
+GO
+SELECT * FROM Consorcio.Consorcio
 
 EXEC Operaciones.SP_generadorCuentaBancaria;
+GO
 SELECT * FROM Consorcio.CuentaBancaria;
 
-
-EXEC Operaciones.sp_ImportarInquilinosPropietarios @RutaArchivo = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-datos.csv';
---SELECT * FROM Consorcio.Persona;
-
+EXEC Operaciones.sp_ImportarInquilinosPropietarios @RutaArchivo = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-datos.csv';
+GO
 EXEC Operaciones.sp_ImportarUFInquilinos @RutaArchivo = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-UF.csv';
+GO
 SELECT * FROM Consorcio.Persona
 
-EXEC Operaciones.sp_ImportarUFporConsorcio @RutaArchivo = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\UF por consorcio.txt';
+EXEC Operaciones.sp_ImportarUFporConsorcio @RutaArchivo = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\UF por consorcio.txt';
+GO
 SELECT * FROM Consorcio.UnidadFuncional
 
 EXEC Operaciones.sp_CargarGastosExtraordinarios;
+GO
 SELECT * FROM Negocio.GastoExtraordinario
 
--- ESTOS 3 SPS SE EJECUTAN UNO ATRAS DE OTRO Y LOS 3 RELLENAN LA MISMA TABLA
-TRUNCATE TABLE Negocio.GastoOrdinario
-EXEC Operaciones.sp_ImportarGastosMensuales @ruta = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\Servicios.Servicios.json';
-SELECT * FROM Negocio.GastoOrdinario;
+BEGIN TRY
+
+    BEGIN TRAN;
+   --=============================================
+    -- Importar Servicios (Gastos Mensuales)
+    --============================================
+
+	PRINT 'Ejecutando sp_ImportarGastosMensuales...'
+    EXEC Operaciones.sp_ImportarGastosMensuales @ruta = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\Servicios.Servicios.json';
+    PRINT 'Gastos Mensuales importados correctamente.';
+
+    --============================================
+    -- Importar Proveedores
+    --============================================
+
+	PRINT 'Ejecutando sp_ImportarDatosProveedores...';
+    EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\datos varios - Proveedores.csv';
+    PRINT 'Proveedores importados correctamente.';
+
+    --============================================
+    -- Completar Gastos Generales
+    --============================================
+
+    PRINT 'Ejecutando CargarGastosGeneralesOrdinarios...';
+    EXEC Operaciones.CargarGastosGeneralesOrdinarios;
+    PRINT 'Gastos Generales completados correctamente.';
+
+    COMMIT TRAN;
+    PRINT 'TRANSACCIÓN COMPLETADA EXITOSAMENTE';
+	SELECT * FROM Negocio.GastoOrdinario
+
+END TRY
+BEGIN CATCH
+
+    PRINT 'ERROR EN LA IMPORTACIÓN. HACIENDO ROLLBACK...';
+
+    IF @@TRANCOUNT > 0
+        ROLLBACK TRAN;
+
+    PRINT 'Rollback realizado. La tabla GastoOrdinario queda limpia.';
+
+    THROW;
+END CATCH;
 GO
 
-EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\datos varios - Proveedores.csv';
-SELECT * FROM Negocio.GastoOrdinario;
+EXEC Negocio.SP_GenerarLoteDeExpensas 
 GO
-
-EXEC Operaciones.CargarGastosGeneralesOrdinarios;
-SELECT * FROM Negocio.GastoOrdinario;
-GO
-
---Los parametros de esta ejecucion deben cambiar segun lo q se quiera generar
-EXEC Negocio.SP_GenerarLoteDeExpensas
-
-
---EXEC Operaciones.sp_AplicarPagosACuentas;
-select * from Negocio.Expensa e order by e.id;
-SELECT * FROM Negocio.DetalleExpensa;
-select * from Pago.PagoAplicado;
-SELECT * FROM Negocio.GastoOrdinario;
-SELECT * FROM Negocio.GastoExtraordinario
+SELECT * FROM Negocio.DetalleExpensa
 
 EXEC Operaciones.sp_RellenarCocheras
+GO
 SELECT * FROM Consorcio.Cochera
 
 EXEC Operaciones.sp_RellenarBauleras
+GO
 SELECT * FROM Consorcio.Baulera
+
+/*
+
+SELECT * FROM Negocio.Expensa e order by e.id;
+SELECT * FROM Negocio.DetalleExpensa;
+SELECT * FROM Pago.PagoAplicado;
+SELECT * FROM Negocio.GastoOrdinario;
+SELECT * FROM Negocio.GastoExtraordinario
 SELECT * FROM Consorcio.Consorcio
+*/
 
 
 
