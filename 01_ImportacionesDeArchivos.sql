@@ -17,7 +17,7 @@ GO
 --==================================================================================================================
 --Importar "pagos_consorcios"
 --==================================================================================================================
-CREATE OR ALTER PROCEDURE Operaciones.sp_ImportacionPago (@RutaArchivo VARCHAR(255))
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarPago (@RutaArchivo VARCHAR(255))
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -131,8 +131,8 @@ BEGIN
 END
 GO
 
-IF OBJECT_ID('Operaciones.sp_ImportacionPago', 'P') IS NOT NULL
-PRINT 'Stored Procedure: Operaciones.sp_ImportacionPago creado exitosamente, las modificaciones seran insertadas en la tabla "Pago.Pago"'
+IF OBJECT_ID('Operaciones.sp_ImportarPago', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarPago creado exitosamente, las modificaciones seran insertadas en la tabla "Pago.Pago"'
 GO
 
 --========================================================
@@ -655,7 +655,7 @@ GO
 --Importar "Inquilinos-Propietarios-UF"
 --===============================================================================================================
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_CargarUF_Inquilinos
+CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarUFInquilinos
     @RutaArchivo VARCHAR(500)
 AS
 BEGIN
@@ -748,8 +748,8 @@ BEGIN
 END
 GO
 
-IF OBJECT_ID('Operaciones.sp_CargarUF_Inquilinos', 'P') IS NOT NULL
-PRINT 'Stored Procedure: Operaciones.sp_CargarUF_Inquilinos creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.UnidadFuncional"'
+IF OBJECT_ID('Operaciones.sp_ImportarUFInquilinos', 'P') IS NOT NULL
+PRINT 'Stored Procedure: Operaciones.sp_ImportarUFInquilinos creado exitosamente, las modificaciones seran insertadas en la tabla "Consorcio.UnidadFuncional"'
 GO
 
 --===============================================================================================================

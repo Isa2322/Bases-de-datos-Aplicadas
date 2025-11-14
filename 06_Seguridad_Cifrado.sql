@@ -15,7 +15,7 @@
    - Pastori, Ximena - 42300128
 
    Descripción:
-   Implementación de los requisitos de seguridad:
+   Implementacion de los requisitos de seguridad:
    1) Creación de roles y asignación de permisos según área.
    2) Cifrado de datos personales y sensibles.
    3) Definición y programación de políticas de respaldo (backup).
@@ -117,22 +117,22 @@ GO
 -------------------------------------------------------
 
 
--- Administrativo General: actualización de datos UF y generación de reportes
+-- Administrativo General: actualizacion de datos UF y generacion de reportes
 GRANT SELECT, UPDATE ON SCHEMA::Consorcio TO administrativoGeneral;
 GRANT SELECT ON SCHEMA::Negocio TO administrativoGeneral;
-GRANT EXECUTE ON SCHEMA::Operaciones TO administrativoGeneral;
+GRANT EXECUTE ON SCHEMA::Reporte TO administrativoGeneral;
 
--- Administrativo Bancario: importación de información bancaria + reportes
+-- Administrativo Bancario: importacion de informacion bancaria + reportes
 GRANT SELECT, INSERT, UPDATE ON SCHEMA::Pago TO administrativoBancario;
-GRANT EXECUTE ON SCHEMA::Operaciones TO administrativoBancario;
+GRANT EXECUTE ON SCHEMA::Reporte TO administrativoBancario;
+GRANT EXECUTE ON SCHEMA::Operaciones To administrativoBancario;
 
--- Administrativo Operativo: actualización de UF + reportes
+-- Administrativo Operativo: actualizacion de UF + reportes
 GRANT SELECT, UPDATE ON SCHEMA::Consorcio TO administrativoOperativo;
-GRANT EXECUTE ON SCHEMA::Operaciones TO administrativoOperativo;
+GRANT EXECUTE ON SCHEMA::Reporte TO administrativoOperativo;
 
--- Sistemas: sólo reportes (lectura y ejecución)
-GRANT SELECT ON SCHEMA::Operaciones TO sistemas;
-GRANT EXECUTE ON SCHEMA::Operaciones TO sistemas;
+-- Sistemas: sólo reportes (lectura y ejecucion)
+GRANT EXECUTE ON SCHEMA::Reporte TO sistemas;
 GO
 
 -------------------------------------------------------
@@ -152,7 +152,7 @@ GO
 
 
 -------------------------------------------------------
--------------------- ENCRIPTACIÓN ---------------------
+-------------------- ENCRIPTACION ---------------------
 -------------------------------------------------------
 
 ALTER TABLE Consorcio.Persona
@@ -196,14 +196,14 @@ GO
 
 
 /* =========================================================================================
-   3️⃣ POLÍTICAS DE RESPALDO (BACKUP)
+   3-POLITICAS DE RESPALDO (BACKUP)
 ========================================================================================= */
 
 -- Política general:
 --   • Backup FULL diario (00:00)
 --   • Backup diferencial cada 6 horas
 --   • Backup del log cada 1 hora
---   • Retención: 14 días
+--   • Retención: 14 dias
 --   • RPO: 1 hora / RTO: 30 min
 
 -- Backup completo diario
@@ -226,7 +226,7 @@ GO
 -- RPO: 1 hora / RTO estimado: 30 min
 -- ---------------------------------------------------------
 
-PRINT '✅ Seguridad aplicada: roles creados, datos cifrados y backups configurados.';
+PRINT 'Seguridad aplicada: roles creados, datos cifrados y backups configurados.';
 GO
 
 /*
