@@ -16,16 +16,16 @@ USE [Com5600G11];
 GO
 
 --======================================================================================================
--- Rellenar tabla Gatos Ordinarios (gastos generales)
+-- Rellenar tabla Gastos Ordinarios (gastos generales)
 --======================================================================================================
 
 CREATE OR ALTER PROCEDURE Operaciones.CargarGastosGeneralesOrdinarios
-as
-begin
+AS
+BEGIN
     UPDATE GA
         SET
             GA.nombreEmpresaoPersona = ISNULL(GA.nombreEmpresaoPersona,
-            CHOOSE(ABS(CHECKSUM(NEWID())) % 5 + 1,
+            CHOOSE(ABS(CHECKSUM(NEWID())) % 4 + 1,
                 'Fumigadora La Rápida',
                 'Iluminación LED S.A.',
                 'Llaves Express',
@@ -34,7 +34,7 @@ begin
             )),
         -- Asigna el detalle aleatorio
         GA.detalle = isnull(GA.detalle ,
-            CHOOSE(ABS(CHECKSUM(NEWID())) % 6 + 1,
+            CHOOSE(ABS(CHECKSUM(NEWID())) % 5 + 1,
                 'Reposición de lámparas LED',
                 'Duplicado de llaves',
                 'Fumigación mensual',
@@ -46,8 +46,9 @@ begin
         WHERE UPPER(GA.tipoServicio) = 'GASTOS GENERALES'
         AND (NULLIF(LTRIM(RTRIM(GA.detalle)), '') IS NULL or NULLIF(LTRIM(RTRIM(GA.nombreEmpresaoPersona)), '') IS NULL );
 
-end
-go
+END
+GO
+
 
 --======================================================================================================
 -- Rellenar tabla TIPO DE ROL
