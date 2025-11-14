@@ -299,7 +299,7 @@ BEGIN
     SELECT
         NULL AS idExpensa, 
         GP.consorcioId,
-        GP.TipoGastoBruto AS nombreEmpresaoPersona,
+        NULL AS nombreEmpresaoPersona,
     
         DATEFROMPARTS(
             @AnoActual,
@@ -523,46 +523,38 @@ GO
 --Importar "datos varios (Proveedores)"
 --==================================================================================================================
 
-CREATE OR ALTER PROCEDURE Operaciones.sp_ImportarDatosProveedores
-    @rutaArch VARCHAR(1000)
+CREATE OR ALTER PROCEDURE  Operaciones.sp_ImportarDatosProveedores
+(
+    @rutaArch VARCHAR(500) 
+)
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Validar ruta para evitar inyecciones
+    -- 1. Validar la ruta de entrada para evitar inyección SQL
     IF CHARINDEX('''', @rutaArch) > 0 OR CHARINDEX('--', @rutaArch) > 0 OR
        CHARINDEX('/*', @rutaArch) > 0 OR CHARINDEX('*/', @rutaArch) > 0 OR
-       CHARINDEX(';',  @rutaArch) > 0
+       CHARINDEX(';', @rutaArch) > 0
     BEGIN
-        RAISERROR('La ruta contiene caracteres no permitidos ('' , -- , /*, */ , ;).', 16, 1);
+        RAISERROR('La ruta contiene caracteres no permitidos.', 16, 1);
         RETURN;
     END;
 
-    -- Tablas temporales
-    IF OBJECT_ID('tempdb..#TempProveedoresBulk') IS NOT NULL DROP TABLE #TempProveedoresBulk;
-    CREATE TABLE #TempProveedoresBulk
-    (
-        tipoGasto VARCHAR(200) NULL,
-        columnaMixta VARCHAR(400) NULL,
-        detalleAlternativo VARCHAR(400) NULL,
-        nomConsorcio VARCHAR(200) NULL
+    -- 2. Tabla temporal para cargar los datos crudos del CSV
+    IF OBJECT_ID('tempdb..#TemporalProveedores') IS NOT NULL DROP TABLE #TemporalProveedores;
+    CREATE TABLE #TemporalProveedores (
+        TipoGasto VARCHAR(100),
+        NombreEmpresaDetalle VARCHAR(255),
+        DetalleAdicional VARCHAR(255),
+        NombreConsorcio VARCHAR(100)
     );
 
-    IF OBJECT_ID('tempdb..#TempProveedoresProc') IS NOT NULL DROP TABLE #TempProveedoresProc;
-    CREATE TABLE #TempProveedoresProc
-    (
-        tipoGastoFull VARCHAR(200),
-        tipoBase VARCHAR(200),
-        subTipo VARCHAR(200),
-        tipoParaBD VARCHAR(200),
-        nomEmpresa VARCHAR(400),
-        detalle VARCHAR(400),
-        nomConsorcio VARCHAR(200)
-    );
-
-    BEGIN TRY
-        DECLARE @sqlBulk NVARCHAR(MAX) = N'
-            BULK INSERT #TempProveedoresBulk
+    -- 3. Cargar datos desde el CSV
+    -- Usamos FORMAT = 'CSV' (disponible en SQL Server 2017+)
+    -- Es más robusto y moderno que el método anterior.
+    DECLARE @sql NVARCHAR(MAX);
+    SET @sql = N'
+    BULK INSERT #TemporalProveedores
             FROM ''' + @rutaArch + N'''
             WITH (
                 FIELDTERMINATOR = '';'',
@@ -571,86 +563,112 @@ BEGIN
                 CODEPAGE        = ''65001'',
                 TABLOCK, KEEPNULLS
             );';
-        EXEC(@sqlBulk);
 
-        DECLARE @bulkRows INT = @@ROWCOUNT;
-        IF @bulkRows = 0
-        BEGIN
-            RAISERROR('No se importaron filas desde el CSV. Verifique ruta, separador ; y encabezado.', 16, 1);
-            RETURN;
-        END;
-
-        -- Limpieza básica
-        UPDATE #TempProveedoresBulk
-        SET
-            tipoGasto = LTRIM(RTRIM(REPLACE(REPLACE(tipoGasto, CHAR(13), ''), NCHAR(65279), ''))),
-            columnaMixta = LTRIM(RTRIM(REPLACE(columnaMixta, CHAR(13), ''))),
-            detalleAlternativo = LTRIM(RTRIM(REPLACE(detalleAlternativo, CHAR(13), ''))),
-            nomConsorcio = LTRIM(RTRIM(REPLACE(REPLACE(nomConsorcio, CHAR(13), ''), NCHAR(65279), '')));
-
-        -- Procesar los datos
-        INSERT INTO #TempProveedoresProc (tipoGastoFull, tipoBase, subTipo, tipoParaBD, nomEmpresa, detalle, nomConsorcio)
-        SELECT
-            tb.tipoGasto,
-            CASE WHEN CHARINDEX('-', tb.tipoGasto) > 0
-                 THEN LTRIM(RTRIM(LEFT(tb.tipoGasto, CHARINDEX('-', tb.tipoGasto)-1)))
-                 ELSE tb.tipoGasto END,
-            CASE WHEN CHARINDEX('-', tb.tipoGasto) > 0
-                 THEN LTRIM(RTRIM(SUBSTRING(tb.tipoGasto, CHARINDEX('-', tb.tipoGasto)+1, 200)))
-                 ELSE NULL END,
-            CASE
-                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS DE ADMINISTRACION' THEN 'ADMINISTRACION'
-                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS BANCARIOS'         THEN 'BANCARIOS'
-                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'GASTOS DE LIMPIEZA'       THEN 'LIMPIEZA'
-                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI = 'SEGUROS'                   THEN 'SEGUROS'
-                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI LIKE 'SERVICIOS PUBLICOS-AGUA%' THEN 'SERVICIOS PUBLICOS-Agua'
-                WHEN UPPER(tb.tipoGasto) COLLATE Latin1_General_CI_AI LIKE 'SERVICIOS PUBLICOS-LUZ%'  THEN 'SERVICIOS PUBLICOS-Luz'
-                ELSE tb.tipoGasto
-            END,
-            CASE WHEN CHARINDEX('-', tb.columnaMixta) > 0
-                 THEN LTRIM(RTRIM(LEFT(tb.columnaMixta, CHARINDEX('-', tb.columnaMixta)-1)))
-                 ELSE LTRIM(RTRIM(tb.columnaMixta)) END,
-            CASE
-                WHEN NULLIF(LTRIM(RTRIM(tb.detalleAlternativo)), '') IS NOT NULL
-                    THEN LTRIM(RTRIM(tb.detalleAlternativo))
-                WHEN CHARINDEX('-', tb.columnaMixta) > 0
-                    THEN LTRIM(RTRIM(SUBSTRING(tb.columnaMixta, CHARINDEX('-', tb.columnaMixta)+1, 400)))
-                ELSE NULL
-            END,
-            tb.nomConsorcio
-        FROM #TempProveedoresBulk tb;
-
-        -- Actualizar GastoOrdinario usando consorcioId directamente
-        UPDATE g
-        SET 
-            g.nombreEmpresaoPersona = CASE 
-                WHEN UPPER(pp.tipoBase) = 'SERVICIOS PUBLICOS' AND UPPER(pp.subTipo) = 'AGUA' THEN 'AYSA'
-                WHEN UPPER(pp.tipoBase) = 'SERVICIOS PUBLICOS' AND UPPER(pp.subTipo) = 'LUZ'  THEN 'EDENOR'
-                ELSE pp.nomEmpresa
-            END,
-            g.detalle = pp.detalle
-        FROM Negocio.GastoOrdinario AS g
-        JOIN Consorcio.Consorcio AS c ON c.id = g.consorcioId
-        JOIN #TempProveedoresProc AS pp
-             ON UPPER(LTRIM(RTRIM(g.tipoServicio))) COLLATE Latin1_General_CI_AI
-                = UPPER(LTRIM(RTRIM(pp.tipoParaBD))) COLLATE Latin1_General_CI_AI
-            AND UPPER(LTRIM(RTRIM(c.nombre))) COLLATE Latin1_General_CI_AI
-                = UPPER(LTRIM(RTRIM(pp.nomConsorcio))) COLLATE Latin1_General_CI_AI;
-
-        DECLARE @upd INT = @@ROWCOUNT;
-        PRINT CONCAT('Filas importadas del CSV: ', @bulkRows);
-        PRINT CONCAT('Filas actualizadas en GastoOrdinario: ', @upd);
-
+    BEGIN TRY
+        EXEC sp_executesql @sql;
     END TRY
     BEGIN CATCH
-        PRINT 'Error durante la importación de datos de Proveedores:';
+        PRINT 'Error al cargar el CSV. Detalles:';
         PRINT ERROR_MESSAGE();
+        RAISERROR('No se pudieron cargar los datos del CSV. Verifique la ruta, permisos y formato.', 16, 1);
+        RETURN;
     END CATCH;
 
-    DROP TABLE IF EXISTS #TempProveedoresBulk;
-    DROP TABLE IF EXISTS #TempProveedoresProc;
+   -- select * from #TemporalProveedores;
+    -- 4. CTE para procesar la lógica de negocio y preparar los datos para la actualización
+    WITH CTE_ProveedoresProcesados AS (
+    SELECT
+        TP.NombreConsorcio as NombreConsorcio,
+
+        -- Normalización del tipoServicio
+        CASE
+            WHEN UPPER(TP.TipoGasto) LIKE 'GASTOS BANCARIOS%' THEN 'BANCARIOS'
+            WHEN UPPER(TP.TipoGasto) LIKE 'GASTOS DE ADMINISTRACION%' THEN 'ADMINISTRACION'
+            WHEN UPPER(TP.TipoGasto) LIKE 'GASTOS DE LIMPIEZA%' THEN 'LIMPIEZA'
+            WHEN UPPER(TP.TipoGasto) LIKE 'SEGUROS%' THEN 'SEGUROS'
+            WHEN UPPER(TP.TipoGasto) LIKE 'SERVICIOS PUBLICOS%' THEN 'SERVICIOS PUBLICOS'
+            ELSE UPPER(TP.TipoGasto)
+        END AS tipoServicio_Normalizado,
+
+        -- Nuevo tipoServicio (solo para AYSA/EDENOR)
+        CASE 
+            WHEN UPPER(TP.NombreEmpresaDetalle) = 'AYSA' THEN 'SERVICIOS PUBLICOS'
+            WHEN UPPER(TP.NombreEmpresaDetalle) = 'EDENOR' THEN 'SERVICIOS PUBLICOS'
+            ELSE NULL
+        END AS tipoServicio_Nuevo,
+
+        -- Nombre de empresa/persona (normal)
+        LTRIM(RTRIM(LEFT(TP.NombreEmpresaDetalle, CHARINDEX('-', TP.NombreEmpresaDetalle + '-') - 1)))
+            AS nombreEmpresaoPersona,
+
+        -- Detalle (normal)
+        ISNULL(
+            NULLIF(LTRIM(RTRIM(TP.DetalleAdicional)), ''), 
+            NULLIF(
+                LTRIM(RTRIM(SUBSTRING(TP.NombreEmpresaDetalle, CHARINDEX('-', TP.NombreEmpresaDetalle) + 1, 8000))),
+                ''
+            )
+        ) AS detalle
+    FROM #TemporalProveedores TP
+    )
+    --/*
+    -- 1) Actualizaciones NORMALES con CTE
+
+    
+    UPDATE GA
+    SET
+        GA.nombreEmpresaoPersona = PP.nombreEmpresaoPersona,
+        GA.detalle               = PP.detalle,
+        GA.tipoServicio          = ISNULL(PP.tipoServicio_Nuevo, GA.tipoServicio)
+    FROM Negocio.GastoOrdinario GA
+    
+
+    JOIN Consorcio.Consorcio C
+        ON C.id = GA.consorcioId
+       
+    JOIN CTE_ProveedoresProcesados PP
+    ON UPPER(LTRIM(RTRIM(GA.tipoServicio)))
+        LIKE UPPER(LTRIM(RTRIM(PP.tipoServicio_Normalizado))) + '%'
+
+    WHERE NULLIF(LTRIM(RTRIM(GA.detalle)), '') IS NULL;
+
+
+    -- 2) Actualizar **GASTOS GENERALES** sin depender del CTE
+    UPDATE GA
+    SET
+        GA.nombreEmpresaoPersona =
+            CHOOSE(ABS(CHECKSUM(NEWID())) % 5 + 1,
+                'Fumigadora La Rápida',
+                'Iluminación LED S.A.',
+                'Llaves Express',
+                'Servicios de Mantenimiento Integral',
+                'Piscinas del Sur'
+            ),
+        GA.detalle =
+            CHOOSE(ABS(CHECKSUM(NEWID())) % 6 + 1,
+                'Reposición de lámparas LED',
+                'Duplicado de llaves',
+                'Fumigación mensual',
+                'Mantenimiento de extinguidores',
+                'Limpieza de tanque de agua',
+                'Mantenimiento de jardines'
+            )
+    FROM Negocio.GastoOrdinario GA
+    WHERE UPPER(GA.tipoServicio) = 'GASTOS GENERALES'
+      AND NULLIF(LTRIM(RTRIM(GA.detalle)), '') IS NULL;
+
+    --*/
+    /*
+    select * from CTE_ProveedoresProcesados;
+    select * from Negocio.GastoOrdinario;
+    select * from Consorcio.Consorcio;
+    */
+
+    -- 6. Limpieza
+    IF OBJECT_ID('tempdb..#TemporalProveedores') IS NOT NULL DROP TABLE #TemporalProveedores;
+
     SET NOCOUNT OFF;
-END;
+END
 GO
 
 IF OBJECT_ID('Operaciones.sp_ImportarDatosProveedores', 'P') IS NOT NULL
