@@ -184,10 +184,10 @@ BEGIN
         idPersona INT IDENTITY(1,1) PRIMARY KEY,
         nombre VARCHAR(100) NOT NULL,
         apellido VARCHAR(100) NOT NULL,
-        dni VARCHAR(20) NOT NULL,
+        dni CHAR(8) NOT NULL,
         email VARCHAR(150),
         CVU_CBU VARCHAR(22),
-        telefono VARCHAR(50),
+        telefono VARCHAR(15),
         idTipoRol INT NOT NULL,
         CONSTRAINT FK_Consorcio_TipoRol FOREIGN KEY (idTipoRol) 
             REFERENCES Consorcio.TipoRol(idTipoRol),
@@ -248,9 +248,9 @@ BEGIN
         id INT IDENTITY(1,1) PRIMARY KEY,
         CVU_CBU VARCHAR(22) NOT NULL, -- Cambiado a VARCHAR(22) para coincidir con Persona
         consorcioId INT NOT NULL,
-        departamento VARCHAR(10) NULL,
-        piso VARCHAR(10) NULL,
-        numero VARCHAR(10) NULL,
+        departamento CHAR NULL,
+        piso char(4) NULL,
+        numero INT NULL,
         metrosCuadrados DECIMAL(10, 2) NULL,
         porcentajeExpensas DECIMAL(5, 2) NuLL,
         tipo VARCHAR(50) NULL,
@@ -295,7 +295,7 @@ BEGIN
     (
         id INT IDENTITY(1,1) PRIMARY KEY,
         unidadFuncionalId INT NULL,
-        numero VARCHAR(10) NOT NULL,
+        numero INT NOT NULL,
         porcentajeExpensas DECIMAL(5, 2) NOT NULL,
         
         CONSTRAINT FK_Cochera_UnidadFuncional FOREIGN KEY (unidadFuncionalId) 
@@ -313,7 +313,7 @@ BEGIN
     (
         id INT IDENTITY(1,1) PRIMARY KEY,
         unidadFuncionalId INT NULL,
-        numero VARCHAR(10) NOT NULL,
+        numero INT NOT NULL,
         porcentajeExpensas DECIMAL(5, 2) NOT NULL,
         CONSTRAINT FK_Baulera_UnidadFuncional FOREIGN KEY (unidadFuncionalId) REFERENCES Consorcio.UnidadFuncional(id)
     )

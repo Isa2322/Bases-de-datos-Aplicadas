@@ -665,9 +665,9 @@ BEGIN
     CREATE TABLE #TempUFInquilinos (
         CVU_CBUPersona VARCHAR(22),
         nombreConsorcio VARCHAR(100),
-        numero VARCHAR(10),
-        piso VARCHAR(10),
-        departamento VARCHAR(10)
+        numero INT,
+        piso char(4),
+        departamento CHAR
     );
 
         -- sanity check de ruta
@@ -726,7 +726,7 @@ BEGIN
             WHERE LTRIM(RTRIM(I.nombreConsorcio)) = C.nombre
         )  AS consorcioId,
         LTRIM(RTRIM(I.numero)),
-        LTRIM(RTRIM(I.piso)),
+        I.piso,
         LTRIM(RTRIM(I.departamento)),
         NULL, -- m2
         NULL, -- coeficiente
