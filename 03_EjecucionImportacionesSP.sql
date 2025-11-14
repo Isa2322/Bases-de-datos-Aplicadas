@@ -29,37 +29,30 @@ GO
 
 EXEC Operaciones.sp_CargaTiposRol
 GO
-SELECT * FROM Consorcio.TipoRol
 
 EXEC Operaciones.sp_CrearYcargar_FormasDePago
 GO
-SELECT * FROM Pago.FormaDePago 
 
 EXEC Operaciones.sp_ImportarPago @rutaArchivo  = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\pagos_consorcios.csv';
 GO
-SELECT * FROM Pago.Pago;
 
 EXEC Operaciones.sp_ImportarDatosConsorcios @rutaArch= 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\datos varios - Consorcios.csv';
 GO
-SELECT * FROM Consorcio.Consorcio
-
-EXEC Operaciones.SP_generadorCuentaBancaria;
-GO
-SELECT * FROM Consorcio.CuentaBancaria;
 
 EXEC Operaciones.sp_ImportarInquilinosPropietarios @RutaArchivo = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-datos.csv';
 GO
+
 EXEC Operaciones.sp_ImportarUFInquilinos @RutaArchivo = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-UF.csv';
 GO
-SELECT * FROM Consorcio.Persona
+
+EXEC Operaciones.SP_generadorCuentaBancaria;
+GO
 
 EXEC Operaciones.sp_ImportarUFporConsorcio @RutaArchivo = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\UF por consorcio.txt';
 GO
-SELECT * FROM Consorcio.UnidadFuncional
 
 EXEC Operaciones.sp_CargarGastosExtraordinarios;
 GO
-SELECT * FROM Negocio.GastoExtraordinario
 
 BEGIN TRY
 
@@ -90,7 +83,6 @@ BEGIN TRY
 
     COMMIT TRAN;
     PRINT 'TRANSACCIÓN COMPLETADA EXITOSAMENTE';
-	SELECT * FROM Negocio.GastoOrdinario
 
 END TRY
 BEGIN CATCH
@@ -108,26 +100,27 @@ GO
 
 EXEC Negocio.SP_GenerarLoteDeExpensas 
 GO
-SELECT * FROM Negocio.DetalleExpensa
 
 EXEC Operaciones.sp_RellenarCocheras
 GO
-SELECT * FROM Consorcio.Cochera
 
 EXEC Operaciones.sp_RellenarBauleras
 GO
-SELECT * FROM Consorcio.Baulera
 
-/*
-
-SELECT * FROM Negocio.Expensa e order by e.id;
-SELECT * FROM Negocio.DetalleExpensa;
-SELECT * FROM Pago.PagoAplicado;
-SELECT * FROM Negocio.GastoOrdinario;
-SELECT * FROM Negocio.GastoExtraordinario
+SELECT * FROM Consorcio.TipoRol
+SELECT * FROM Consorcio.Persona
+SELECT * FROM Consorcio.CuentaBancaria;
 SELECT * FROM Consorcio.Consorcio
-*/
-
+SELECT * FROM Consorcio.UnidadFuncional
+SELECT * FROM Consorcio.Cochera
+SELECT * FROM Consorcio.Baulera
+SELECT * FROM Negocio.DetalleExpensa
+SELECT * FROM Negocio.Expensa
+SELECT * FROM Negocio.GastoExtraordinario
+SELECT * FROM Negocio.GastoOrdinario
+SELECT * FROM Pago.FormaDePago
+SELECT * FROM Pago.Pago
+SELECT * FROM Pago.FormaDePago
 
 
 
