@@ -120,19 +120,18 @@ GO
 -- Administrativo General: actualización de datos UF y generación de reportes
 GRANT SELECT, UPDATE ON SCHEMA::Consorcio TO administrativoGeneral;
 GRANT SELECT ON SCHEMA::Negocio TO administrativoGeneral;
-GRANT EXECUTE ON SCHEMA::Operaciones TO administrativoGeneral;
+GRANT EXECUTE ON SCHEMA::Reporte TO administrativoGeneral;
 
 -- Administrativo Bancario: importación de información bancaria + reportes
 GRANT SELECT, INSERT, UPDATE ON SCHEMA::Pago TO administrativoBancario;
-GRANT EXECUTE ON SCHEMA::Operaciones TO administrativoBancario;
+GRANT EXECUTE ON SCHEMA::Reporte TO administrativoBancario;
 
 -- Administrativo Operativo: actualización de UF + reportes
 GRANT SELECT, UPDATE ON SCHEMA::Consorcio TO administrativoOperativo;
-GRANT EXECUTE ON SCHEMA::Operaciones TO administrativoOperativo;
+GRANT EXECUTE ON SCHEMA::Reporte TO administrativoOperativo;
 
 -- Sistemas: sólo reportes (lectura y ejecución)
-GRANT SELECT ON SCHEMA::Operaciones TO sistemas;
-GRANT EXECUTE ON SCHEMA::Operaciones TO sistemas;
+GRANT EXECUTE ON SCHEMA::Reporte TO sistemas;
 GO
 
 -------------------------------------------------------
