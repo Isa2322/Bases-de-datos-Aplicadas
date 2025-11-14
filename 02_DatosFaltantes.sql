@@ -311,8 +311,13 @@ BEGIN
     WHILE @i <= @total
     BEGIN
         -- Elegimos un consorcio y expensa existente
-        SET @consorcioId = (SELECT TOP 1 id FROM Consorcio.Consorcio ORDER BY NEWID());
-        SET @idExpensa = (SELECT TOP 1 id FROM Negocio.Expensa ORDER BY NEWID());
+        SELECT TOP 1 
+                @idExpensa = e.id,
+                @consorcioId = e.consorcioId
+            FROM 
+                Negocio.Expensa AS e
+            ORDER BY 
+                NEWID();
 
         -- Descripciones aleatorias
         DECLARE @detalles TABLE (detalle NVARCHAR(200));
@@ -356,10 +361,10 @@ BEGIN
              @fechaEmision, @importeTotal, @detalle, @esPagoTotal, @nroCuota, @totalCuota);
 
         SET @i += 1;
-    END;
+    END
 
     PRINT N'Carga de gastos extraordinarios completada.';
-END;
+END
 GO
 
 IF OBJECT_ID('Operaciones.sp_CargarGastosExtraordinarios', 'P') IS NOT NULL

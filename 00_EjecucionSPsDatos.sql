@@ -32,16 +32,11 @@ EXEC Operaciones.sp_ImportacionPago @rutaArchivo  = 'C:\Users\Milagros quispe\Do
 SELECT * FROM Pago.Pago;
 
 EXEC Operaciones.sp_ImportarDatosConsorcios @rutaArch= 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\datos varios - Consorcios.csv';
-SELECT * FROM Consorcio.Consorcio
+
 
 EXEC Operaciones.SP_generadorCuentaBancaria;
-SELECT * FROM Consorcio.CuentaBancaria
+SELECT * FROM Consorcio.CuentaBancaria;
 
-EXEC Operaciones.sp_ImportarGastosMensuales @ruta = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Servicios.Servicios.json';
---SELECT * FROM Negocio.GastoOrdinario;
-
-EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\datos varios - Proveedores.csv';
---SELECT * FROM Negocio.GastoOrdinario;
 
 EXEC Operaciones.sp_ImportarInquilinosPropietarios @RutaArchivo = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-datos.csv';
 --SELECT * FROM Consorcio.Persona;
@@ -52,14 +47,23 @@ SELECT * FROM Consorcio.Persona
 EXEC Operaciones.sp_ImportarUFporConsorcio @RutaArchivo = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\UF por consorcio.txt';
 SELECT * FROM Consorcio.UnidadFuncional
 
-EXEC Operaciones.sp_CargarGastosExtraordinarios
+EXEC Operaciones.sp_CargarGastosExtraordinarios;
 --SELECT * FROM Negocio.GastoExtraordinario
+
+EXEC Operaciones.sp_ImportarGastosMensuales @ruta = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Servicios.Servicios.json';
+--SELECT * FROM Negocio.GastoOrdinario;
+
+EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\datos varios - Proveedores.csv';
+--SELECT * FROM Negocio.GastoOrdinario;
+
 
 --Los parametros de esta ejecucion deben cambiar segun lo q se quiera generar
 EXEC Negocio.SP_GenerarLoteDeExpensas
-EXEC Operaciones.sp_AplicarPagosACuentas;
-select * from Negocio.Expensa;
-SELECT * FROM Negocio.DetalleExpensa
+
+
+--EXEC Operaciones.sp_AplicarPagosACuentas;
+select * from Negocio.Expensa e order by e.id;
+SELECT * FROM Negocio.DetalleExpensa;
 select * from Pago.PagoAplicado;
 SELECT * FROM Negocio.GastoOrdinario;
 SELECT * FROM Negocio.GastoExtraordinario
@@ -69,11 +73,12 @@ SELECT * FROM Consorcio.Cochera
 
 EXEC Operaciones.sp_RellenarBauleras
 SELECT * FROM Consorcio.Baulera
+SELECT * FROM Consorcio.Consorcio
+
 
 /*
-
 --Reporte 1
-EXEC Reporte.sp_Reporte1_FlujoSemanal 1,2025,5
+EXEC Reporte.sp_Reporte1_FlujoSemanal Azcuenaga,2025,5
 
 --Reporte 2
 --El ultimo valor filtra los departamentos que no tienen pagos ese ano

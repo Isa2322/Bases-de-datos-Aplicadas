@@ -49,7 +49,7 @@ BEGIN
     END;
 
     -- 3. Inicia la l�gica de CTE
-    ; WITH EgresosCombinados AS ( 
+     WITH EgresosCombinados AS ( 
         -- Ordinarios
         SELECT
             fechaEmision,
