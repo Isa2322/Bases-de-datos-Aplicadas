@@ -621,7 +621,6 @@ BEGIN
         GA.detalle               = PP.detalle,
         GA.tipoServicio          = ISNULL(PP.tipoServicio_Nuevo, GA.tipoServicio)
     FROM Negocio.GastoOrdinario GA
-    
 
     JOIN Consorcio.Consorcio C
         ON C.id = GA.consorcioId
@@ -630,32 +629,8 @@ BEGIN
     ON UPPER(LTRIM(RTRIM(GA.tipoServicio)))
         LIKE UPPER(LTRIM(RTRIM(PP.tipoServicio_Normalizado))) + '%'
 
-    WHERE NULLIF(LTRIM(RTRIM(GA.detalle)), '') IS NULL;
+    WHERE NULLIF(LTRIM(RTRIM(GA.detalle)), '') IS NULL AND  GA.tipoServicio <> 'GASTOS GENERALES';
 
-
-    -- 2) Actualizar **GASTOS GENERALES** sin depender del CTE
-    UPDATE GA
-    SET
-        GA.nombreEmpresaoPersona =
-            CHOOSE(ABS(CHECKSUM(NEWID())) % 5 + 1,
-                'Fumigadora La Rápida',
-                'Iluminación LED S.A.',
-                'Llaves Express',
-                'Servicios de Mantenimiento Integral',
-                'Piscinas del Sur'
-            ),
-        GA.detalle =
-            CHOOSE(ABS(CHECKSUM(NEWID())) % 6 + 1,
-                'Reposición de lámparas LED',
-                'Duplicado de llaves',
-                'Fumigación mensual',
-                'Mantenimiento de extinguidores',
-                'Limpieza de tanque de agua',
-                'Mantenimiento de jardines'
-            )
-    FROM Negocio.GastoOrdinario GA
-    WHERE UPPER(GA.tipoServicio) = 'GASTOS GENERALES'
-      AND NULLIF(LTRIM(RTRIM(GA.detalle)), '') IS NULL;
 
     --*/
     /*

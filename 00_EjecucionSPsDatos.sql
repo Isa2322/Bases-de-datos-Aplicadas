@@ -55,6 +55,7 @@ EXEC Operaciones.sp_ImportarGastosMensuales @ruta = 'C:\Users\Milagros quispe\Do
 
 EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\datos varios - Proveedores.csv';
 --SELECT * FROM Negocio.GastoOrdinario;
+exec Operaciones.CargarGastosGeneralesOrdinarios;
 
 
 --Los parametros de esta ejecucion deben cambiar segun lo q se quiera generar
