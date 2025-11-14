@@ -135,8 +135,9 @@ IF OBJECT_ID('Operaciones.sp_ImportacionPago', 'P') IS NOT NULL
 PRINT 'Stored Procedure: Operaciones.sp_ImportacionPago creado exitosamente, las modificaciones seran insertadas en la tabla "Pago.Pago"'
 GO
 
--- Función para determinar el N-ésimo día hábil de un mes _________________________________________________  
--- PONERLO ANTES DE  CARGAR EXPENSA O CUALQUIER OTRA QUE LA UTILICE!!!!!
+--========================================================
+-- Función para determinar el N-ésimo día hábil de un mes
+--========================================================
 
 CREATE or alter FUNCTION Operaciones.ObtenerDiaHabil
 (
@@ -188,7 +189,9 @@ BEGIN
 END
 GO
 
--- Funcion de Limpieza _______________________________________________________________________________
+--============================================
+--Funcion de Limpieza SP Importar Servicios
+--============================================
 
 CREATE or alter FUNCTION Operaciones.LimpiarNumero (@ImporteVarchar VARCHAR(50))
 RETURNS DECIMAL(18, 2)
@@ -550,8 +553,6 @@ BEGIN
     );
 
     -- 3. Cargar datos desde el CSV
-    -- Usamos FORMAT = 'CSV' (disponible en SQL Server 2017+)
-    -- Es más robusto y moderno que el método anterior.
     DECLARE @sql NVARCHAR(MAX);
     SET @sql = N'
     BULK INSERT #TemporalProveedores
@@ -575,7 +576,7 @@ BEGIN
     END CATCH;
 
    -- select * from #TemporalProveedores;
-    -- 4. CTE para procesar la lógica de negocio y preparar los datos para la actualización
+    -- 4. CTE procesa la tabla
     WITH CTE_ProveedoresProcesados AS (
     SELECT
         TP.NombreConsorcio as NombreConsorcio,

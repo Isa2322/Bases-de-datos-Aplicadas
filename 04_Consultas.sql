@@ -112,6 +112,10 @@ BEGIN
     ORDER BY ES.Anio, ES.Semana;
 END
 GO
+
+IF OBJECT_ID('Reporte.sp_Reporte1_FlujoSemanal', 'P') IS NOT NULL
+    PRINT 'SP Para el reporte 1: Reporte.sp_Reporte1_FlujoSemanal creado con exito'
+GO
 --=========================================================================================================
 /*
     REPORTE 2:
@@ -191,6 +195,10 @@ BEGIN
 		) AS p
     ORDER BY departamento;
 END
+GO
+
+IF OBJECT_ID('Reporte.sp_Reporte2_RecaudacionMesDepto', 'P') IS NOT NULL
+    PRINT 'SP Para el reporte 2: Reporte.sp_Reporte2_RecaudacionMesDepto creado con exito'
 GO
 
 --=========================================================================================================
@@ -276,16 +284,21 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID('Reporte.sp_Reporte3_RecaudacionPorProcedencia', 'P') IS NOT NULL
+    PRINT 'SP Para el reporte 3: Reporte.sp_Reporte3_RecaudacionPorProcedencia creado con exito'
+GO
+
 --=========================================================================================================
 /*
     REPORTE 4:
     Obtenga los 5 (cinco) meses de mayores gastos y los 5 (cinco) de mayores ingresos.  
 */
-IF OBJECT_ID('Reporte.SP_ObtenerTopNMesesGastosIngresos', 'P') IS NOT NULL
-    DROP PROCEDURE Reporte.SP_ObtenerTopNMesesGastosIngresos
+
+IF OBJECT_ID('Reporte.sp_Reporte4_ObtenerTopNMesesGastosIngresos', 'P') IS NOT NULL
+    DROP PROCEDURE Reporte.sp_Reporte4_ObtenerTopNMesesGastosIngresos
 GO
 
-CREATE PROCEDURE Reporte.SP_ObtenerTopNMesesGastosIngresos
+CREATE PROCEDURE Reporte.sp_Reporte4_ObtenerTopNMesesGastosIngresos
     @TopN INT = 5,
     @Anio INT = NULL,
     @ConsorcioID INT = NULL
@@ -390,6 +403,10 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID('Reporte.sp_Reporte4_ObtenerTopNMesesGastosIngresos', 'P') IS NOT NULL
+    PRINT 'SP Para el reporte 4: Reporte.sp_Reporte4_ObtenerTopNMesesGastosIngresos creado con exito'
+GO
+
 -- ======================================================================================================================
 
 /*
@@ -399,6 +416,7 @@ GO
     contactar o remitir el trámite al estudio jurídico.
     CON XML
 */
+
 IF OBJECT_ID('Reporte.sp_Reporte5_MayoresMorosos_XML', 'P') IS NOT NULL
     DROP PROCEDURE Reporte.sp_Reporte5_MayoresMorosos_XML
 GO
@@ -464,6 +482,10 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID('Reporte.sp_Reporte5_MayoresMorosos_XML', 'P') IS NOT NULL
+    PRINT 'SP Para el reporte 5: Reporte.sp_Reporte5_MayoresMorosos_XML creado con exito'
+GO
+
 -- =============================================================================================================
 /*
     REPORTE 6:
@@ -471,6 +493,7 @@ GO
     para el conjunto examinado. 
     CON XML
 */
+
 IF OBJECT_ID('Reporte.sp_Reporte6_PagosOrdinarios_XML', 'P') IS NOT NULL
     DROP PROCEDURE Reporte.sp_Reporte6_PagosOrdinarios_XML
 GO
@@ -544,4 +567,8 @@ BEGIN
             FOR XML PATH('unidadFuncional'), ROOT('pagosOrdinarios'), TYPE
         ) AS XML_Reporte6;
 END;
+GO
+
+IF OBJECT_ID('Reporte.sp_Reporte6_PagosOrdinarios_XML', 'P') IS NOT NULL
+    PRINT 'SP Para el reporte 6: Reporte.sp_Reporte6_PagosOrdinarios_XML creado con exito'
 GO

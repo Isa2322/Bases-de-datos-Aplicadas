@@ -28,32 +28,32 @@ SELECT * FROM Consorcio.TipoRol
 EXEC Operaciones.sp_CrearYcargar_FormasDePago
 SELECT * FROM Pago.FormaDePago 
 
-EXEC Operaciones.sp_ImportacionPago @rutaArchivo  = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\pagos_consorcios.csv';
+EXEC Operaciones.sp_ImportacionPago @rutaArchivo  = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\pagos_consorcios.csv';
 SELECT * FROM Pago.Pago;
 
-EXEC Operaciones.sp_ImportarDatosConsorcios @rutaArch= 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\datos varios - Consorcios.csv';
+EXEC Operaciones.sp_ImportarDatosConsorcios @rutaArch= 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\datos varios - Consorcios.csv';
 
 
 EXEC Operaciones.SP_generadorCuentaBancaria;
 SELECT * FROM Consorcio.CuentaBancaria;
 
 
-EXEC Operaciones.sp_ImportarInquilinosPropietarios @RutaArchivo = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-datos.csv';
+EXEC Operaciones.sp_ImportarInquilinosPropietarios @RutaArchivo = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-datos.csv';
 --SELECT * FROM Consorcio.Persona;
 
-EXEC Operaciones.sp_CargarUF_Inquilinos @RutaArchivo = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-UF.csv';
+EXEC Operaciones.sp_CargarUF_Inquilinos @RutaArchivo = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-UF.csv';
 SELECT * FROM Consorcio.Persona
 
-EXEC Operaciones.sp_ImportarUFporConsorcio @RutaArchivo = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\UF por consorcio.txt';
+EXEC Operaciones.sp_ImportarUFporConsorcio @RutaArchivo = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\UF por consorcio.txt';
 SELECT * FROM Consorcio.UnidadFuncional
 
 EXEC Operaciones.sp_CargarGastosExtraordinarios;
 --SELECT * FROM Negocio.GastoExtraordinario
 
-EXEC Operaciones.sp_ImportarGastosMensuales @ruta = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Servicios.Servicios.json';
+EXEC Operaciones.sp_ImportarGastosMensuales @ruta = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\Servicios.Servicios.json';
 --SELECT * FROM Negocio.GastoOrdinario;
 
-EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\datos varios - Proveedores.csv';
+EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\datos varios - Proveedores.csv';
 --SELECT * FROM Negocio.GastoOrdinario;
 exec Operaciones.CargarGastosGeneralesOrdinarios;
 
@@ -91,7 +91,7 @@ EXEC Reporte.sp_Reporte3_RecaudacionPorProcedencia 1,'2025-05-01','2025-06-30'
 
 --Reporte 4
 --Puede filtrar por consorcio, ano y cambiar el top
-EXEC Reporte.SP_ObtenerTopNMesesGastosIngresos 
+EXEC Reporte.sp_Reporte4_ObtenerTopNMesesGastosIngresos 
 
 --Reporte 5
 --Puede tener una fecha limite para limitar el periodo de los valores
@@ -101,3 +101,5 @@ EXEC Reporte.sp_Reporte5_MayoresMorosos_XML 1,'2025-05-01'
 --Puede filtrar por Consocio, Unidad Funcional y periodo(usando 2 fechas)
 EXEC Reporte.sp_Reporte6_PagosOrdinarios_XML
 */
+
+
