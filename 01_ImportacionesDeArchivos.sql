@@ -135,8 +135,10 @@ IF OBJECT_ID('Operaciones.sp_ImportacionPago', 'P') IS NOT NULL
 PRINT 'Stored Procedure: Operaciones.sp_ImportacionPago creado exitosamente, las modificaciones seran insertadas en la tabla "Pago.Pago"'
 GO
 
--- Función para determinar el N-ésimo día hábil de un mes _________________________________________________  
--- PONERLO ANTES DE  CARGAR EXPENSA O CUALQUIER OTRA QUE LA UTILICE!!!!!
+
+--========================================================
+-- Función para determinar el N-ésimo día hábil de un mes
+--========================================================
 
 CREATE or alter FUNCTION Operaciones.ObtenerDiaHabil
 (
@@ -188,7 +190,9 @@ BEGIN
 END
 GO
 
--- Funcion de Limpieza _______________________________________________________________________________
+--============================================
+--Funcion de Limpieza SP Importar Servicios
+--============================================
 
 CREATE or alter FUNCTION Operaciones.LimpiarNumero (@ImporteVarchar VARCHAR(50))
 RETURNS DECIMAL(18, 2)
