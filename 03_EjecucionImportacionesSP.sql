@@ -31,20 +31,20 @@ SELECT * FROM Pago.FormaDePago
 EXEC Operaciones.sp_ImportarPago @rutaArchivo  = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\pagos_consorcios.csv';
 SELECT * FROM Pago.Pago;
 
-EXEC Operaciones.sp_ImportarDatosConsorcios @rutaArch= 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\datos varios - Consorcios.csv';
+EXEC Operaciones.sp_ImportarDatosConsorcios @rutaArch= 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\datos varios - Consorcios.csv';
 
 
 EXEC Operaciones.SP_generadorCuentaBancaria;
 SELECT * FROM Consorcio.CuentaBancaria;
 
 
-EXEC Operaciones.sp_ImportarInquilinosPropietarios @RutaArchivo = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-datos.csv';
+EXEC Operaciones.sp_ImportarInquilinosPropietarios @RutaArchivo = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-datos.csv';
 --SELECT * FROM Consorcio.Persona;
 
 EXEC Operaciones.sp_ImportarUFInquilinos @RutaArchivo = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-UF.csv';
 SELECT * FROM Consorcio.Persona
 
-EXEC Operaciones.sp_ImportarUFporConsorcio @RutaArchivo = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\UF por consorcio.txt';
+EXEC Operaciones.sp_ImportarUFporConsorcio @RutaArchivo = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\UF por consorcio.txt';
 SELECT * FROM Consorcio.UnidadFuncional
 
 EXEC Operaciones.sp_CargarGastosExtraordinarios;
@@ -83,29 +83,6 @@ SELECT * FROM Consorcio.Baulera
 SELECT * FROM Consorcio.Consorcio
 
 
-/*
---Reporte 1
-EXEC Reporte.sp_Reporte1_FlujoSemanal Azcuenaga,2025,5
 
---Reporte 2
---El ultimo valor filtra los departamentos que no tienen pagos ese ano
-EXEC Reporte.sp_Reporte2_RecaudacionMesDepto 1,2025,0
-
---Reporte 3
---Aunque no lo use, pongan el dia a las fechas si la cambian o les tira error
-EXEC Reporte.sp_Reporte3_RecaudacionPorProcedencia 1,'2025-05-01','2025-06-30'
-
---Reporte 4
---Puede filtrar por consorcio, ano y cambiar el top
-EXEC Reporte.sp_Reporte4_ObtenerTopNMesesGastosIngresos 
-
---Reporte 5
---Puede tener una fecha limite para limitar el periodo de los valores
-EXEC Reporte.sp_Reporte5_MayoresMorosos_XML 1,'2025-05-01'
-
---Reporte 6
---Puede filtrar por Consocio, Unidad Funcional y periodo(usando 2 fechas)
-EXEC Reporte.sp_Reporte6_PagosOrdinarios_XML
-*/
 
 
