@@ -28,7 +28,7 @@ SELECT * FROM Consorcio.TipoRol
 EXEC Operaciones.sp_CrearYcargar_FormasDePago
 SELECT * FROM Pago.FormaDePago 
 
-EXEC Operaciones.sp_ImportarPago @rutaArchivo  = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\pagos_consorcios.csv';
+EXEC Operaciones.sp_ImportarPago @rutaArchivo  = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\pagos_consorcios.csv';
 SELECT * FROM Pago.Pago;
 
 EXEC Operaciones.sp_ImportarDatosConsorcios @rutaArch= 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\datos varios - Consorcios.csv';
@@ -41,27 +41,23 @@ SELECT * FROM Consorcio.CuentaBancaria;
 EXEC Operaciones.sp_ImportarInquilinosPropietarios @RutaArchivo = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-datos.csv';
 --SELECT * FROM Consorcio.Persona;
 
-EXEC Operaciones.sp_ImportarUFInquilinos @RutaArchivo = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-UF.csv';
+EXEC Operaciones.sp_ImportarUFInquilinos @RutaArchivo = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Inquilino-propietarios-UF.csv';
 SELECT * FROM Consorcio.Persona
 
 EXEC Operaciones.sp_ImportarUFporConsorcio @RutaArchivo = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\UF por consorcio.txt';
 SELECT * FROM Consorcio.UnidadFuncional
 
 EXEC Operaciones.sp_CargarGastosExtraordinarios;
-SELECT * FROM Negocio.GastoExtraordinario
 
 -- ESTOS 3 SPS SE EJECUTAN UNO ATRAS DE OTRO Y LOS 3 RELLENAN LA MISMA TABLA
 TRUNCATE TABLE Negocio.GastoOrdinario
-EXEC Operaciones.sp_ImportarGastosMensuales @ruta = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\Servicios.Servicios.json';
-SELECT * FROM Negocio.GastoOrdinario;
+EXEC Operaciones.sp_ImportarGastosMensuales @ruta = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\Servicios.Servicios.json';
 GO
 
-EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = 'C:\Users\camil\OneDrive\Escritorio\TP BASES\Bases-de-datos-Aplicadas\consorcios\datos varios - Proveedores.csv';
-SELECT * FROM Negocio.GastoOrdinario;
+EXEC Operaciones.sp_ImportarDatosProveedores @rutaArch = 'C:\Users\Milagros quispe\Documents\GitHub\Bases-de-datos-Aplicadas\consorcios\datos varios - Proveedores.csv';
 GO
 
 EXEC Operaciones.CargarGastosGeneralesOrdinarios;
-SELECT * FROM Negocio.GastoOrdinario;
 GO
 
 --Los parametros de esta ejecucion deben cambiar segun lo q se quiera generar

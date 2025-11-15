@@ -633,12 +633,6 @@ BEGIN
     WHERE NULLIF(LTRIM(RTRIM(GA.detalle)), '') IS NULL AND  GA.tipoServicio <> 'GASTOS GENERALES';
 
 
-    --*/
-    /*
-    select * from CTE_ProveedoresProcesados;
-    select * from Negocio.GastoOrdinario;
-    select * from Consorcio.Consorcio;
-    */
 
     -- 6. Limpieza
     IF OBJECT_ID('tempdb..#TemporalProveedores') IS NOT NULL DROP TABLE #TemporalProveedores;
